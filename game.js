@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.5 (Fixed Tree Generation) ---
+// --- GAME MAKER: v10.6 (Player Sprite & Animation) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -75,8 +75,16 @@ const lightChunks = new Map();
 
 // --- 3. Game State ---
 let player = {
-    x: 0, y: 0, width: TILE_SIZE * 0.8,
-    height: TILE_SIZE * 1.8, vx: 0, vy: 0, isOnGround: false
+    x: 0, y: 0,
+    width: TILE_SIZE * 0.8,
+    height: TILE_SIZE * 1.8,
+    vx: 0, vy: 0,
+    isOnGround: false,
+    // --- NEW: Animation state ---
+    direction: 1, // 1 for right, -1 for left
+    state: 'idle', // 'idle', 'walking', 'jumping'
+    animationFrame: 0,
+    animationTimer: 0
 };
 let camera = { x: 0, y: 0 };
 let keys = { w: false, a: false, d: false, e: false };
@@ -334,13 +342,9 @@ function findSurfaceY(globalX) {
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 
-/**
- * REPLACED: This is the new generateTreeInChunk function with bug fixes
- */
 function generateTreeInChunk(chunk, x, y) {
     const trunkHeight = Math.floor(Math.random() * 3) + 4;
     
-    // 1. Place trunk
     for (let i = 0; i < trunkHeight; i++) {
         const currentY = y - i;
         if (currentY < 0) break;
@@ -349,7 +353,7 @@ function generateTreeInChunk(chunk, x, y) {
         }
     }
 
-    const leafBaseY = y - trunkHeight; // Y-coord *above* the trunk
+    const leafBaseY = y - trunkHeight;
 
     const setLeaf = (lx, ly) => {
         const newX = x + lx;
@@ -360,33 +364,25 @@ function generateTreeInChunk(chunk, x, y) {
     };
     
     // --- FIXES APPLIED HERE ---
-
-    // Top-most leaf (Check if Y is valid)
     if (leafBaseY - 2 >= 0) {
         setLeaf(0, leafBaseY - 2);
     }
-    
-    // 3-wide row (Check if Y is valid)
     if (leafBaseY - 1 >= 0) {
         setLeaf(-1, leafBaseY - 1);
         setLeaf(0, leafBaseY - 1);
         setLeaf(1, leafBaseY - 1);
     }
-    
-    // 5-wide row (top) (Check if Y is valid)
     if (leafBaseY >= 0) {
         setLeaf(-2, leafBaseY);
         setLeaf(-1, leafBaseY);
-        setLeaf(0, leafBaseY);  // <-- ADDED MISSING BLOCK
+        setLeaf(0, leafBaseY);
         setLeaf(1, leafBaseY);
         setLeaf(2, leafBaseY);
     }
-
-    // 5-wide row (base) (Check if Y is valid)
     if (leafBaseY + 1 >= 0) {
         setLeaf(-2, leafBaseY + 1);
         setLeaf(-1, leafBaseY + 1);
-        setLeaf(0, leafBaseY + 1); // <-- ADDED MISSING BLOCK
+        setLeaf(0, leafBaseY + 1);
         setLeaf(1, leafBaseY + 1);
         setLeaf(2, leafBaseY + 1);
     }
@@ -530,7 +526,7 @@ function updateSunlightColumn(tileX) {
     let sunBlocked = false;
     let surfaceY = findSurfaceY(tileX);
     
-    for (let y = 0; y < 100; y++) { // Assume reasonable world height
+    for (let y = 0; y < 100; y++) {
         const tileId = getTile(tileX, y);
         let light = 0;
         
@@ -915,6 +911,31 @@ function update() {
     } else {
         player.vx = 0; player.vy = 0;
     }
+
+    // --- NEW: Animation State ---
+    if (!player.isOnGround) {
+        player.state = 'jumping';
+    } else if (keys.a || keys.d) {
+        player.state = 'walking';
+        if (keys.a) player.direction = -1;
+        if (keys.d) player.direction = 1;
+    } else {
+        player.state = 'idle';
+    }
+
+    // Update animation timer
+    player.animationTimer++;
+    if (player.animationTimer > 8) { // Adjust this number to change walk speed
+        player.animationTimer = 0;
+        player.animationFrame++;
+        if (player.animationFrame > 3) { // 4 frames (0, 1, 2, 3)
+            player.animationFrame = 0;
+        }
+    }
+    
+    if (player.state === 'idle' || player.state === 'jumping') {
+        player.animationFrame = 0; // Reset frame if not walking
+    }
     
     if (isFurnaceOpen) {
         updateFurnace();
@@ -1022,7 +1043,6 @@ function draw() {
             const tileType = getTile(x, y);
             const baseColor = TILE_COLORS[tileType];
             
-            // --- THIS IS THE FIX ---
             let lightLevel = getLight(x, y);
             if (isBlockSolid(tileType)) {
                 const lightAbove = getLight(x, y - 1);
@@ -1032,23 +1052,21 @@ function draw() {
                 lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
             }
             
-            // --- THIS IS THE NEW CHANGE ---
             const finalLightLevel = Math.max(lightLevel, MIN_GLOBAL_LIGHT);
             const finalLight = finalLightLevel / MAX_LIGHT;
             
             if (tileType === TILES.AIR && finalLightLevel === MIN_GLOBAL_LIGHT && lightLevel === 0) {
-                 ctx.fillStyle = '#000000'; // Only draw pitch black if it's unlit air
+                 ctx.fillStyle = '#000000';
             } else {
                 ctx.fillStyle = blendColor(baseColor, finalLight);
             }
-            // --- END OF CHANGE ---
             
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
 
-    ctx.fillStyle = '#FF0000';
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // --- REPLACED: Draw player sprite ---
+    drawPlayer();
     
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -1087,6 +1105,69 @@ function draw() {
         ctx.textAlign = 'left';
     }
 }
+
+// --- NEW: Player Drawing Function ---
+function drawPlayer() {
+    ctx.save();
+    // Translate to the center of the player for easy flipping
+    ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+    // Flip the canvas if facing left
+    ctx.scale(player.direction, 1);
+
+    // Define player colors
+    const skin = '#E0A07E';
+    const shirt = '#4080A0';
+    const pants = '#304060';
+    const hair = '#503010';
+    
+    const w = player.width;
+    const h = player.height;
+    const headSize = TILE_SIZE * 0.8;
+    const bodyHeight = h - headSize;
+    
+    // Y-offsets from the center
+    const headY = -h / 2 + headSize / 2;
+    const bodyY = headY + headSize / 2 + (bodyHeight * 0.6) / 2;
+    const legY = bodyY + (bodyHeight * 0.6) / 2;
+
+    // Legs (drawn first)
+    ctx.fillStyle = pants;
+    const legHeight = bodyHeight * 0.4;
+    const legWidth = w/2 * 0.7;
+    
+    if (player.state === 'walking') {
+        // 4-frame animation, 2 frames per leg position
+        const frame = Math.floor(player.animationFrame / 2); // 0 or 1
+        if (frame === 0) {
+            // Left leg back, right leg front
+            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight * 0.9); // Back leg
+            ctx.fillRect(1, legY, legWidth, legHeight); // Front leg
+        } else {
+            // Left leg front, right leg back
+            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight); // Front leg
+            ctx.fillRect(1, legY, legWidth, legHeight * 0.9); // Back leg
+        }
+    } else {
+        // Idle or Jumping, legs are straight
+        ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight);
+        ctx.fillRect(1, legY, legWidth, legHeight);
+    }
+    
+    // Body
+    ctx.fillStyle = shirt;
+    ctx.fillRect(-w/2 * 0.8, bodyY - (bodyHeight*0.6)/2, w*0.8, bodyHeight * 0.6);
+
+    // Head
+    ctx.fillStyle = skin;
+    ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize);
+
+    // Hair
+    ctx.fillStyle = hair;
+    ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize/3);
+
+    ctx.restore();
+}
+
 
 function drawHotbar() {
     const numSlots = 9;
