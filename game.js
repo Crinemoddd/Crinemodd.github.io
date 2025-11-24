@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.1 (Dynamic Spill Lighting - FIXED) ---
+// --- GAME MAKER: v10.2 (Dynamic Spill Lighting - FIXED) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -493,7 +493,6 @@ function updateSunlightColumn(tileX) {
     let sunBlocked = false;
     let surfaceY = findSurfaceY(tileX);
     
-    // Check from sky down to a reasonable depth
     for (let y = 0; y < 100; y++) { // Assume reasonable world height
         const tileId = getTile(tileX, y);
         let light = 0;
@@ -525,15 +524,13 @@ function handleRightClick() {
     if (dist > INTERACTION_RANGE) return;
     
     const block = getTile(mouse.tileX, mouse.tileY);
-    const slot = hotbarSlots[selectedSlot]; // Check what item we're holding
+    const slot = hotbarSlots[selectedSlot];
     
     if (block === TILES.CRAFTING_TABLE) {
         isCraftingOpen = true; isFurnaceOpen = false;
     } else if (block === TILES.FURNACE) {
         isCraftingOpen = false; isFurnaceOpen = true;
-    } else if (block === TILES.AIR || (slot && slot.id === TILES.TORCH && !isBlockSolid(block))) { 
-        // Allow placing blocks in air
-        // OR placing torches on non-solid blocks (like leaves)
+    } else if (block === TILES.AIR || (slot && slot.id === TILES.TORCH && !isBlockSolid(block))) {
         placeBlock();
     }
 }
@@ -556,11 +553,9 @@ function mineBlock() {
         setTile(mouse.tileX, mouse.tileY, TILES.AIR);
         
         // --- BUG FIX ---
-        // Call setLight(x,y,0) instead of the non-existent removeLight()
         if (tileType === TILES.TORCH) {
-            setLight(mouse.tileX, mouse.tileY, 0); // This will queue a light removal
+            setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
         } else if (isBlockSolid(tileType)) {
-            // Blocked light, so re-propagate
             updateSunlightColumn(mouse.tileX);
             lightQueue.push([mouse.tileX + 1, mouse.tileY]);
             lightQueue.push([mouse.tileX - 1, mouse.tileY]);
@@ -603,8 +598,7 @@ function placeBlock() {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
             // --- BUG FIX ---
-            // Call setLight(x,y,0) instead of the non-existent removeLight()
-            setLight(mouse.tileX, mouse.tileY, 0);
+            setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
             updateSunlightColumn(mouse.tileX);
         }
     }
@@ -637,8 +631,9 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
                 return;
             }
 
+            // --- BUG FIX ---
             if (isShiftClicking && arrayName !== 'craftingOut' && arrayName !== 'furnaceOut') {
-                quickMoveItem(slotArray, index, fromArea, setter);
+                quickMoveItem(slotArray, index, arrayName, setter); // Pass arrayName as fromArea
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -736,11 +731,6 @@ function consumeCraftingMaterials(uiType, setter) {
     }
 }
 
-/**
- * --- BUG FIX ---
- * This function now correctly checks for shapeless recipes
- * with multiple, different ingredients.
- */
 function checkCrafting() {
     craftingOutput = null;
     const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
@@ -751,14 +741,14 @@ function checkCrafting() {
         const recipe = CRAFTING_RECIPES[key];
         
         if (recipe.type === 'shapeless') {
-            let gridItems = gridIds.filter(id => id !== null); // Get all non-null items
+            // --- BUG FIX ---
+            let gridItems = gridIds.filter(id => id !== null);
             let recipeItems = [];
             recipe.input.forEach(item => {
                 for(let i=0; i<item.count; i++) {
                     recipeItems.push(item.id);
                 }
             });
-
             let match = true;
             if (gridItems.length !== recipeItems.length) {
                 match = false;
@@ -791,7 +781,6 @@ function checkCrafting() {
                 }
                 if (!match) break;
             }
-
             if (match) {
                 craftingOutput = { ...recipe.output };
                 return;
@@ -1200,6 +1189,8 @@ function init() {
     player.y = spawnY * TILE_SIZE - player.height;
     camera.x = player.x - (canvas.width / 2) + (player.width / 2);
     camera.y = player.y - (canvas.height / 2);
+    
+    // --- Pre-load initial chunks ---
     const playerChunkX = Math.floor(spawnX / CHUNK_SIZE);
     const playerChunkY = Math.floor(spawnY / CHUNK_SIZE);
     const renderDist = 2;
@@ -1209,8 +1200,23 @@ function init() {
         }
     }
     
-    // Initial light propagation
-    console.log("Propagating initial light...");
+    // --- NEW: Prime the light queue ---
+    console.log("Priming light queue...");
+    for (const [key, chunk] of lightChunks.entries()) {
+        const [chunkX, chunkY] = key.split(',').map(Number);
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            for (let x = 0; x < CHUNK_SIZE; x++) {
+                if (chunk[y][x] > 0) {
+                    const globalX = chunkX * CHUNK_SIZE + x;
+                    const globalY = chunkY * CHUNK_SIZE + y;
+                    lightQueue.push([globalX, globalY]);
+                }
+            }
+        }
+    }
+    
+    // --- Propagate all initial light ---
+    console.log(`Propagating initial light (${lightQueue.length} sources)...`);
     processLightQueue();
     console.log("Light propagated.");
     
