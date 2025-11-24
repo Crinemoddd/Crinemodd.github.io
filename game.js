@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.2 (Dynamic Spill Lighting - FIXED) ---
+// --- GAME MAKER: v10.3 (Dynamic Spill Lighting - FIXED) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -510,7 +510,9 @@ function updateSunlightColumn(tileX) {
         }
         
         if (tileId === TILES.TORCH) {
+            // Keep torch light, but add it to queue to be sure
             light = 14;
+            lightQueue.push([tileX, y]);
         }
         
         setLight(tileX, y, light);
@@ -552,7 +554,6 @@ function mineBlock() {
         addBlockToInventory(tileType);
         setTile(mouse.tileX, mouse.tileY, TILES.AIR);
         
-        // --- BUG FIX ---
         if (tileType === TILES.TORCH) {
             setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
         } else if (isBlockSolid(tileType)) {
@@ -597,7 +598,6 @@ function placeBlock() {
         if (slot.id === TILES.TORCH) {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
-            // --- BUG FIX ---
             setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
             updateSunlightColumn(mouse.tileX);
         }
@@ -631,9 +631,8 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
                 return;
             }
 
-            // --- BUG FIX ---
             if (isShiftClicking && arrayName !== 'craftingOut' && arrayName !== 'furnaceOut') {
-                quickMoveItem(slotArray, index, arrayName, setter); // Pass arrayName as fromArea
+                quickMoveItem(slotArray, index, arrayName, setter); // BUG FIX: Pass arrayName
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -988,12 +987,25 @@ function draw() {
             const tileType = getTile(x, y);
             const baseColor = TILE_COLORS[tileType];
             
-            const lightLevel = getLight(x, y) / MAX_LIGHT;
+            // --- THIS IS THE FIX ---
+            let lightLevel = getLight(x, y); // Get its own light
+            if (isBlockSolid(tileType)) {
+                // If it's a solid block, check neighbors
+                const lightAbove = getLight(x, y - 1);
+                const lightBelow = getLight(x, y + 1);
+                const lightLeft = getLight(x - 1, y);
+                const lightRight = getLight(x + 1, y);
+                // Use the brightest neighbor
+                lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
+            }
+            // --- END OF FIX ---
+
+            const finalLight = lightLevel / MAX_LIGHT;
             
-            if (tileType === TILES.AIR && lightLevel === 0) {
+            if (tileType === TILES.AIR && finalLight === 0) {
                 ctx.fillStyle = '#000000';
             } else {
-                ctx.fillStyle = blendColor(baseColor, lightLevel);
+                ctx.fillStyle = blendColor(baseColor, finalLight);
             }
             
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
