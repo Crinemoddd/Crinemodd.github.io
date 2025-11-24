@@ -1,17 +1,18 @@
-// --- GAME MAKER: v8.2 (Fixed Trees) ---
+// --- GAME MAKER: v10.1 (Dynamic Spill Lighting - FIXED) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // --- 2. World Configuration ---
 const TILE_SIZE = 20;
-const CHUNK_SIZE = 16; // World is now in 16x16 chunks
+const CHUNK_SIZE = 16;
 
 const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
-    COAL: 14, FURNACE: 15, WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102,
-    IRON_PICKAXE: 103, DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
+    COAL: 14, FURNACE: 15, TORCH: 16,
+    WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
+    DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111
 };
@@ -20,11 +21,12 @@ const TILE_NAMES = {
     [TILES.COPPER]: 'Copper Ore', [TILES.DIAMOND]: 'Diamond Ore', [TILES.COBALT]: 'Cobalt Ore',
     [TILES.PLATINUM]: 'Platinum Ore', [TILES.WOOD_LOG]: 'Wood Log', [TILES.LEAVES]: 'Leaves',
     [TILES.WOOD_PLANK]: 'Wood Plank', [TILES.CRAFTING_TABLE]: 'Crafting Table', [TILES.STICK]: 'Stick',
-    [TILES.COAL]: 'Coal', [TILES.FURNACE]: 'Furnace', [TILES.WOOD_PICKAXE]: 'Wood Pickaxe',
-    [TILES.STONE_PICKAXE]: 'Stone Pickaxe', [TILES.COPPER_PICKAXE]: 'Copper Pickaxe',
-    [TILES.IRON_PICKAXE]: 'Iron Pickaxe', [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe',
-    [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe', [TILES.PLATINUM_PICKAXE]: 'Platinum Pickaxe',
-    [TILES.COPPER_INGOT]: 'Copper Ingot', [TILES.IRON_INGOT]: 'Iron Ingot', [TILES.DIAMOND_INGOT]: 'Diamond',
+    [TILES.COAL]: 'Coal', [TILES.FURNACE]: 'Furnace', [TILES.TORCH]: 'Torch',
+    [TILES.WOOD_PICKAXE]: 'Wood Pickaxe', [TILES.STONE_PICKAXE]: 'Stone Pickaxe',
+    [TILES.COPPER_PICKAXE]: 'Copper Pickaxe', [TILES.IRON_PICKAXE]: 'Iron Pickaxe',
+    [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe', [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe',
+    [TILES.PLATINUM_PICKAXE]: 'Platinum Pickaxe', [TILES.COPPER_INGOT]: 'Copper Ingot',
+    [TILES.IRON_INGOT]: 'Iron Ingot', [TILES.DIAMOND_INGOT]: 'Diamond',
     [TILES.COBALT_INGOT]: 'Cobalt Ingot', [TILES.PLATINUM_INGOT]: 'Platinum Ingot'
 };
 const TILE_COLORS = {
@@ -33,12 +35,29 @@ const TILE_COLORS = {
     [TILES.DIAMOND]: '#B9F2FF', [TILES.COBALT]: '#0047AB', [TILES.PLATINUM]: '#E5E4E2',
     [TILES.WOOD_LOG]: '#663300', [TILES.LEAVES]: '#006400', [TILES.WOOD_PLANK]: '#AF8F53',
     [TILES.CRAFTING_TABLE]: '#A07040', [TILES.STICK]: '#8B4513', [TILES.COAL]: '#2E2E2E',
-    [TILES.FURNACE]: '#505050', [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080',
-    [TILES.COPPER_PICKAXE]: '#B87333', [TILES.IRON_PICKAXE]: '#D2B48C', [TILES.DIAMOND_PICKAXE]: '#B9F2FF',
-    [TILES.COBALT_PICKAXE]: '#0047AB', [TILES.PLATINUM_PICKAXE]: '#E5E4E2', [TILES.COPPER_INGOT]: '#B87333',
-    [TILES.IRON_INGOT]: '#D2B48C', [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB',
-    [TILES.PLATINUM_INGOT]: '#E5E4E2'
+    [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500',
+    [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
+    [TILES.IRON_PICKAXE]: '#D2B48C', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
+    [TILES.PLATINUM_PICKAXE]: '#E5E4E2', [TILES.COPPER_INGOT]: '#B87333', [TILES.IRON_INGOT]: '#D2B4D2',
+    [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB', [TILES.PLATINUM_INGOT]: '#E5E4E2'
 };
+
+const BLOCK_OPACITY = {
+    [TILES.AIR]: 1,
+    [TILES.LEAVES]: 2, // Leaves dim light
+    [TILES.TORCH]: 1,
+    [TILES.GRASS]: 16, [TILES.DIRT]: 16, [TILES.STONE]: 16, [TILES.IRON]: 16,
+    [TILES.COPPER]: 16, [TILES.DIAMOND]: 16, [TILES.COBALT]: 16, [TILES.PLATINUM]: 16,
+    [TILES.WOOD_LOG]: 16, [TILES.WOOD_PLANK]: 16, [TILES.CRAFTING_TABLE]: 16,
+    [TILES.COAL]: 16, [TILES.FURNACE]: 16
+};
+function getBlockOpacity(tileId) {
+    return BLOCK_OPACITY[tileId] ?? 16;
+}
+function isBlockSolid(tileId) {
+    return getBlockOpacity(tileId) >= 16;
+}
+
 const MAX_STACK = 64;
 const BLOCK_TIER = {
     [TILES.DIRT]: 0, [TILES.GRASS]: 0, [TILES.WOOD_LOG]: 0, [TILES.LEAVES]: 0,
@@ -51,8 +70,8 @@ const TOOL_TIER = {
     [TILES.PLATINUM_PICKAXE]: 6
 };
 
-// --- NEW: Chunk-based World ---
 const worldChunks = new Map();
+const lightChunks = new Map();
 
 // --- 3. Game State ---
 let player = {
@@ -84,6 +103,12 @@ let furnaceCookTime = 0;
 let furnaceFuelTime = 0;
 const COOK_TIME = 200;
 
+// --- Light Engine ---
+const MAX_LIGHT = 15;
+const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
+let lightQueue = [];
+let removeQueue = [];
+
 const simplex = new SimplexNoise();
 
 // --- 4. Recipe Databases ---
@@ -94,18 +119,12 @@ const CRAFTING_RECIPES = {
     },
     STICK: {
         type: 'shaped',
-        pattern: [
-            [TILES.WOOD_PLANK],
-            [TILES.WOOD_PLANK]
-        ],
+        pattern: [[TILES.WOOD_PLANK], [TILES.WOOD_PLANK]],
         output: { id: TILES.STICK, count: 4 }
     },
     CRAFTING_TABLE: {
         type: 'shaped',
-        pattern: [
-            [TILES.WOOD_PLANK, TILES.WOOD_PLANK],
-            [TILES.WOOD_PLANK, TILES.WOOD_PLANK]
-        ],
+        pattern: [[TILES.WOOD_PLANK, TILES.WOOD_PLANK], [TILES.WOOD_PLANK, TILES.WOOD_PLANK]],
         output: { id: TILES.CRAFTING_TABLE, count: 1 }
     },
     FURNACE: {
@@ -116,8 +135,14 @@ const CRAFTING_RECIPES = {
             [TILES.STONE, TILES.STONE, TILES.STONE]
         ],
         output: { id: TILES.FURNACE, count: 1 }
+    },
+    TORCH: {
+        type: 'shapeless',
+        input: [{id: TILES.WOOD_LOG, count: 1}, {id: TILES.COAL, count: 1}],
+        output: {id: TILES.TORCH, count: 4}
     }
 };
+
 function addPickaxeRecipes() {
     const materials = [
         { id: TILES.WOOD_PLANK, pick: TILES.WOOD_PICKAXE },
@@ -151,7 +176,7 @@ const FUEL_TIMES = {
     [TILES.WOOD_LOG]: 150, [TILES.WOOD_PLANK]: 75, [TILES.COAL]: 800
 };
 
-// --- 5. NEW: Chunk Management ---
+// --- 5. Chunk Management ---
 const TERRAIN_HEIGHT_SCALE = 50;
 const TERRAIN_HEIGHT_AMOUNT = 15;
 const BASE_HEIGHT = 30;
@@ -162,13 +187,11 @@ function getChunkKey(chunkX, chunkY) {
     return `${chunkX},${chunkY}`;
 }
 
-/**
- * REPLACED: This is the new generateChunk function with 2 passes
- */
 function generateChunk(chunkX, chunkY) {
     let chunk = new Array(CHUNK_SIZE).fill(0).map(() => new Array(CHUNK_SIZE).fill(TILES.AIR));
+    let lightChunk = new Array(CHUNK_SIZE).fill(0).map(() => new Array(CHUNK_SIZE).fill(0));
     
-    // Pass 1: Generate Terrain
+    // Pass 1: Terrain
     for (let x = 0; x < CHUNK_SIZE; x++) {
         const globalX = chunkX * CHUNK_SIZE + x;
         let heightNoise = simplex.noise2D(globalX / TERRAIN_HEIGHT_SCALE, 0);
@@ -176,14 +199,10 @@ function generateChunk(chunkX, chunkY) {
 
         for (let y = 0; y < CHUNK_SIZE; y++) {
             const globalY = chunkY * CHUNK_SIZE + y;
-
-            if (globalY < surfaceY) {
-                chunk[y][x] = TILES.AIR;
-            } else if (globalY === surfaceY) {
-                chunk[y][x] = TILES.GRASS;
-            } else if (globalY > surfaceY && globalY < surfaceY + 5) {
-                chunk[y][x] = TILES.DIRT;
-            } else if (globalY >= surfaceY + 5) {
+            if (globalY < surfaceY) chunk[y][x] = TILES.AIR;
+            else if (globalY === surfaceY) chunk[y][x] = TILES.GRASS;
+            else if (globalY > surfaceY && globalY < surfaceY + 5) chunk[y][x] = TILES.DIRT;
+            else if (globalY >= surfaceY + 5) {
                 chunk[y][x] = TILES.STONE;
                 let oreNoise = simplex.noise2D(globalX / ORE_NOISE_SCALE, globalY / ORE_NOISE_SCALE);
                 if (oreNoise > 0.6) chunk[y][x] = TILES.COAL;
@@ -193,37 +212,69 @@ function generateChunk(chunkX, chunkY) {
                 else if (oreNoise > 0.85) chunk[y][x] = TILES.COBALT;
                 else if (oreNoise > 0.9) chunk[y][x] = TILES.PLATINUM;
             }
-
             if (chunk[y][x] === TILES.DIRT || chunk[y][x] === TILES.STONE) {
                 let caveNoise = simplex.noise2D(globalX / CAVE_NOISE_SCALE, globalY / CAVE_NOISE_SCALE);
-                if (caveNoise > 0.6) {
-                    chunk[y][x] = TILES.AIR;
-                }
+                if (caveNoise > 0.6) chunk[y][x] = TILES.AIR;
             }
         }
     }
     
-    // Pass 2: Generate Trees
+    // Pass 2: Trees
     for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let y = 0; y < CHUNK_SIZE; y++) {
             if (chunk[y][x] === TILES.GRASS && y > 0 && chunk[y-1][x] === TILES.AIR) {
                 if (Math.random() < 0.05) {
-                    generateTreeInChunk(chunk, x, y - 1); // y-1 is the air block
+                    generateTreeInChunk(chunk, x, y - 1);
                 }
             }
         }
     }
 
-    return chunk;
-}
+    // Pass 3: Sunlight
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+        let sunBlocked = false;
+        const globalX = chunkX * CHUNK_SIZE + x;
+        const surfaceY = findSurfaceY(globalX);
+        
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            const globalY = chunkY * CHUNK_SIZE + y;
+            const tileId = chunk[y][x];
+            
+            if (globalY < surfaceY) {
+                if (isBlockSolid(tileId)) sunBlocked = true;
+                lightChunk[y][x] = sunBlocked ? 0 : AMBIENT_LIGHT_LEVEL;
+            } else {
+                sunBlocked = true;
+                lightChunk[y][x] = 0;
+            }
+            
+            if (tileId === TILES.TORCH) {
+                lightChunk[y][x] = 14;
+            } else if (isBlockSolid(tileId)) {
+                lightChunk[y][x] = 0;
+            }
+        }
+    }
 
+    const key = getChunkKey(chunkX, chunkY);
+    worldChunks.set(key, chunk);
+    lightChunks.set(key, lightChunk);
+}
 
 function getOrCreateChunk(chunkX, chunkY) {
     const key = getChunkKey(chunkX, chunkY);
     if (!worldChunks.has(key)) {
-        worldChunks.set(key, generateChunk(chunkX, chunkY));
+        generateChunk(chunkX, chunkY);
     }
     return worldChunks.get(key);
+}
+
+function getLightChunk(chunkX, chunkY) {
+    const key = getChunkKey(chunkX, chunkY);
+    if (!lightChunks.has(key)) {
+        getOrCreateChunk(chunkX, chunkY);
+    }
+    return lightChunks.get(key);
 }
 
 function correctMod(n, m) {
@@ -248,60 +299,62 @@ function setTile(tileX, tileY, tileId) {
     chunk[localY][localX] = tileId;
 }
 
+function getLight(tileX, tileY) {
+    const chunkX = Math.floor(tileX / CHUNK_SIZE);
+    const chunkY = Math.floor(tileY / CHUNK_SIZE);
+    const chunk = getLightChunk(chunkX, chunkY);
+    if (!chunk) return 0;
+    const localX = correctMod(tileX, CHUNK_SIZE);
+    const localY = correctMod(tileY, CHUNK_SIZE);
+    return chunk[localY][localX];
+}
+
+function setLight(tileX, tileY, lightLevel) {
+    const chunkX = Math.floor(tileX / CHUNK_SIZE);
+    const chunkY = Math.floor(tileY / CHUNK_SIZE);
+    const chunk = getLightChunk(chunkX, chunkY);
+    if (!chunk) return;
+    const localX = correctMod(tileX, CHUNK_SIZE);
+    const localY = correctMod(tileY, CHUNK_SIZE);
+    
+    const oldLevel = chunk[localY][localX];
+    
+    if (lightLevel > oldLevel) {
+        chunk[localY][localX] = lightLevel;
+        lightQueue.push([tileX, tileY]);
+    } else if (lightLevel < oldLevel) {
+        chunk[localY][localX] = lightLevel;
+        removeQueue.push([tileX, tileY, oldLevel]);
+    }
+}
+
 function findSurfaceY(globalX) {
     let heightNoise = simplex.noise2D(globalX / TERRAIN_HEIGHT_SCALE, 0);
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 
-/**
- * REPLACED: This is the new generateTreeInChunk function
- */
 function generateTreeInChunk(chunk, x, y) {
-    const trunkHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks high
-    
-    // 1. Place trunk (going up from y)
+    const trunkHeight = Math.floor(Math.random() * 3) + 4;
     for (let i = 0; i < trunkHeight; i++) {
         const currentY = y - i;
-        if (currentY < 0) break; // Stop if we hit top of chunk
+        if (currentY < 0) break;
         if (chunk[currentY][x] === TILES.AIR) {
             chunk[currentY][x] = TILES.WOOD_LOG;
         }
     }
-
-    // 2. Place leaves
-    const leafBaseY = y - trunkHeight; // Y-coord *above* the trunk
-
-    // Helper to safely set a leaf
+    const leafBaseY = y - trunkHeight;
     const setLeaf = (lx, ly) => {
         const newX = x + lx;
         const newY = ly;
-        // Check chunk bounds (0-15) and if tile is AIR
         if (newX >= 0 && newX < CHUNK_SIZE && newY >= 0 && newY < CHUNK_SIZE && chunk[newY][newX] === TILES.AIR) {
             chunk[newY][newX] = TILES.LEAVES;
         }
     };
-    
-    // Top-most leaf
     setLeaf(0, leafBaseY - 2);
-    
-    // 3-wide row
-    setLeaf(-1, leafBaseY - 1);
-    setLeaf(0, leafBaseY - 1);
-    setLeaf(1, leafBaseY - 1);
-    
-    // 5-wide row (top)
-    setLeaf(-2, leafBaseY);
-    setLeaf(-1, leafBaseY);
-    setLeaf(1, leafBaseY);
-    setLeaf(2, leafBaseY);
-
-    // 5-wide row (base)
-    setLeaf(-2, leafBaseY + 1);
-    setLeaf(-1, leafBaseY + 1);
-    setLeaf(1, leafBaseY + 1);
-    setLeaf(2, leafBaseY + 1);
+    setLeaf(-1, leafBaseY - 1); setLeaf(0, leafBaseY - 1); setLeaf(1, leafBaseY - 1);
+    setLeaf(-2, leafBaseY); setLeaf(-1, leafBaseY); setLeaf(1, leafBaseY); setLeaf(2, leafBaseY);
+    setLeaf(-2, leafBaseY + 1); setLeaf(-1, leafBaseY + 1); setLeaf(1, leafBaseY + 1); setLeaf(2, leafBaseY + 1);
 }
-
 
 // --- 6. Inventory Helpers ---
 function addItemToInventory(itemStack) {
@@ -436,6 +489,35 @@ function resizeCanvas() {
 }
 
 // --- 8. Interaction Logic ---
+function updateSunlightColumn(tileX) {
+    let sunBlocked = false;
+    let surfaceY = findSurfaceY(tileX);
+    
+    // Check from sky down to a reasonable depth
+    for (let y = 0; y < 100; y++) { // Assume reasonable world height
+        const tileId = getTile(tileX, y);
+        let light = 0;
+        
+        if (!sunBlocked) {
+            if (y < surfaceY) {
+                if (isBlockSolid(tileId)) {
+                    sunBlocked = true;
+                } else {
+                    light = AMBIENT_LIGHT_LEVEL;
+                }
+            } else {
+                sunBlocked = true;
+            }
+        }
+        
+        if (tileId === TILES.TORCH) {
+            light = 14;
+        }
+        
+        setLight(tileX, y, light);
+    }
+}
+
 function handleRightClick() {
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -443,12 +525,15 @@ function handleRightClick() {
     if (dist > INTERACTION_RANGE) return;
     
     const block = getTile(mouse.tileX, mouse.tileY);
+    const slot = hotbarSlots[selectedSlot]; // Check what item we're holding
     
     if (block === TILES.CRAFTING_TABLE) {
         isCraftingOpen = true; isFurnaceOpen = false;
     } else if (block === TILES.FURNACE) {
         isCraftingOpen = false; isFurnaceOpen = true;
-    } else if (block === TILES.AIR) {
+    } else if (block === TILES.AIR || (slot && slot.id === TILES.TORCH && !isBlockSolid(block))) { 
+        // Allow placing blocks in air
+        // OR placing torches on non-solid blocks (like leaves)
         placeBlock();
     }
 }
@@ -469,6 +554,19 @@ function mineBlock() {
     if (toolTier >= requiredTier) {
         addBlockToInventory(tileType);
         setTile(mouse.tileX, mouse.tileY, TILES.AIR);
+        
+        // --- BUG FIX ---
+        // Call setLight(x,y,0) instead of the non-existent removeLight()
+        if (tileType === TILES.TORCH) {
+            setLight(mouse.tileX, mouse.tileY, 0); // This will queue a light removal
+        } else if (isBlockSolid(tileType)) {
+            // Blocked light, so re-propagate
+            updateSunlightColumn(mouse.tileX);
+            lightQueue.push([mouse.tileX + 1, mouse.tileY]);
+            lightQueue.push([mouse.tileX - 1, mouse.tileY]);
+            lightQueue.push([mouse.tileX, mouse.tileY + 1]);
+            lightQueue.push([mouse.tileX, mouse.tileY - 1]);
+        }
     } else {
         console.log(`Need tier ${requiredTier} pickaxe!`);
     }
@@ -484,10 +582,13 @@ function placeBlock() {
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
     if (dist > INTERACTION_RANGE) return;
     
-    if (getTile(mouse.tileX, mouse.tileY) !== TILES.AIR) {
-        return;
+    const currentTile = getTile(mouse.tileX, mouse.tileY);
+    if (currentTile !== TILES.AIR) {
+        if (slot.id !== TILES.TORCH || isBlockSolid(currentTile)) {
+             return;
+        }
     }
-
+    
     const tilePixelX = mouse.tileX * TILE_SIZE;
     const tilePixelY = mouse.tileY * TILE_SIZE;
     if (player.x < tilePixelX + TILE_SIZE && player.x + player.width > tilePixelX &&
@@ -497,6 +598,15 @@ function placeBlock() {
     
     if (removeBlockFromInventory(hotbarSlots, selectedSlot)) {
         setTile(mouse.tileX, mouse.tileY, slot.id);
+        
+        if (slot.id === TILES.TORCH) {
+            setLight(mouse.tileX, mouse.tileY, 14);
+        } else if (isBlockSolid(slot.id)) {
+            // --- BUG FIX ---
+            // Call setLight(x,y,0) instead of the non-existent removeLight()
+            setLight(mouse.tileX, mouse.tileY, 0);
+            updateSunlightColumn(mouse.tileX);
+        }
     }
 }
 
@@ -528,7 +638,7 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             }
 
             if (isShiftClicking && arrayName !== 'craftingOut' && arrayName !== 'furnaceOut') {
-                quickMoveItem(slotArray, index, arrayName, setter);
+                quickMoveItem(slotArray, index, fromArea, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -542,30 +652,20 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
 function quickMoveItem(slotArray, index, fromArea, setter) {
     let itemStack = slotArray[index];
     if (!itemStack) return;
-
     let remainingStack = null;
-
     if (fromArea === 'crafting' || fromArea === 'furnaceIn' || fromArea === 'furnaceFuel' || fromArea === 'furnaceOut') {
         remainingStack = addItemToInventory(itemStack);
     } else if (fromArea === 'inv' || fromArea === 'hotbar') {
         if (isFurnaceOpen) {
-            if (SMELT_RECIPES[itemStack.id] && !furnaceInput) {
-                furnaceInput = itemStack;
-            } else if (FUEL_TIMES[itemStack.id] && !furnaceFuel) {
-                furnaceFuel = itemStack;
-            } else {
-                remainingStack = addItemToInventory(itemStack);
-            }
+            if (SMELT_RECIPES[itemStack.id] && !furnaceInput) furnaceInput = itemStack;
+            else if (FUEL_TIMES[itemStack.id] && !furnaceFuel) furnaceFuel = itemStack;
+            else remainingStack = addItemToInventory(itemStack);
         } else {
             remainingStack = addItemToInventory(itemStack);
         }
     }
-
-    if (!remainingStack) {
-        setter(null);
-    } else {
-        setter(remainingStack);
-    }
+    if (!remainingStack) setter(null);
+    else setter(remainingStack);
 }
 
 function handleSlotClick(slotArray, index, button, setter) {
@@ -606,7 +706,6 @@ function handleSlotClick(slotArray, index, button, setter) {
 
 function handleOutputClick(outputSlot, uiType, setter, isShiftClicking = false) {
     if (!outputSlot) return;
-
     if (isShiftClicking) {
         let remaining = addItemToInventory({ ...outputSlot });
         if (!remaining) {
@@ -637,6 +736,11 @@ function consumeCraftingMaterials(uiType, setter) {
     }
 }
 
+/**
+ * --- BUG FIX ---
+ * This function now correctly checks for shapeless recipes
+ * with multiple, different ingredients.
+ */
 function checkCrafting() {
     craftingOutput = null;
     const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
@@ -647,14 +751,25 @@ function checkCrafting() {
         const recipe = CRAFTING_RECIPES[key];
         
         if (recipe.type === 'shapeless') {
-            const input = recipe.input[0];
-            let count = 0;
-            let found = true;
-            for (const id of gridIds) {
-                if (id !== null && id !== input.id) found = false;
-                if (id === input.id) count++;
+            let gridItems = gridIds.filter(id => id !== null); // Get all non-null items
+            let recipeItems = [];
+            recipe.input.forEach(item => {
+                for(let i=0; i<item.count; i++) {
+                    recipeItems.push(item.id);
+                }
+            });
+
+            let match = true;
+            if (gridItems.length !== recipeItems.length) {
+                match = false;
+            } else {
+                let gridItemsSorted = [...gridItems].sort().join(',');
+                let recipeItemsSorted = [...recipeItems].sort().join(',');
+                if (gridItemsSorted !== recipeItemsSorted) {
+                    match = false;
+                }
             }
-            if (found && count === input.count) {
+            if (match) {
                 craftingOutput = { ...recipe.output };
                 return;
             }
@@ -782,28 +897,76 @@ function update() {
         updateFurnace();
     }
     
+    // --- Light Engine Processing ---
+    processLightQueue();
+    processRemoveQueue();
+
+    // Chunk Loading
     const playerChunkX = Math.floor(toTileCoord(player.x + player.width/2) / CHUNK_SIZE);
     const playerChunkY = Math.floor(toTileCoord(player.y + player.height/2) / CHUNK_SIZE);
     const renderDist = 2;
-    
     for (let cy = playerChunkY - renderDist; cy <= playerChunkY + renderDist; cy++) {
         for (let cx = playerChunkX - renderDist; cx <= playerChunkX + renderDist; cx++) {
             getOrCreateChunk(cx, cy);
         }
     }
 
+    // Camera
     let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
     let targetCamY = player.y - (canvas.height / 2);
-    
     camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
     camera.y += (targetCamY - camera.y) * CAMERA_SMOOTH_FACTOR;
     if (Math.abs(targetCamX - camera.x) < 0.1) camera.x = targetCamX;
     if (Math.abs(targetCamY - camera.y) < 0.1) camera.y = targetCamY;
 }
 
+// --- Light Processing Functions ---
+function processLightQueue() {
+    let limit = 1000;
+    while (lightQueue.length > 0 && limit > 0) {
+        limit--;
+        const [x, y] = lightQueue.shift();
+        const currentLevel = getLight(x, y);
+        
+        const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+        for (const [nx, ny] of neighbors) {
+            const neighborTile = getTile(nx, ny);
+            const neighborOpacity = getBlockOpacity(neighborTile);
+            const neighborOldLight = getLight(nx, ny);
+            
+            const newLevel = currentLevel - neighborOpacity;
+            
+            if (newLevel > neighborOldLight) {
+                setLight(nx, ny, newLevel);
+            }
+        }
+    }
+}
+
+function processRemoveQueue() {
+    let limit = 1000;
+    while (removeQueue.length > 0 && limit > 0) {
+        limit--;
+        const [x, y, oldLevel] = removeQueue.shift();
+
+        const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
+        for (const [nx, ny] of neighbors) {
+            const neighborLevel = getLight(nx, ny);
+            
+            if (neighborLevel > 0) {
+                if (neighborLevel < oldLevel) {
+                    setLight(nx, ny, 0);
+                } else {
+                    lightQueue.push([nx, ny]);
+                }
+            }
+        }
+    }
+}
+
 function isTileSolid(tileX, tileY) {
     const tileType = getTile(tileX, tileY);
-    return tileType !== TILES.AIR;
+    return isBlockSolid(tileType);
 }
 
 function toTileCoord(pixelCoord) {
@@ -811,6 +974,15 @@ function toTileCoord(pixelCoord) {
 }
 
 // --- 11. Game Loop (Drawing) ---
+function blendColor(hexColor, lightLevel) {
+    const light = Math.max(0, Math.min(1, lightLevel));
+    if (light >= 1.0) return hexColor;
+    if (light <= 0.0) return '#000000';
+    let r=parseInt(hexColor.substring(1,3),16),g=parseInt(hexColor.substring(3,5),16),b=parseInt(hexColor.substring(5,7),16);
+    r=Math.floor(r*light),g=Math.floor(g*light),b=Math.floor(b*light);
+    return`#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`
+}
+
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
@@ -825,14 +997,23 @@ function draw() {
     for (let y = startTileY; y < endTileY; y++) {
         for (let x = startTileX; x < endTileX; x++) {
             const tileType = getTile(x, y);
-            ctx.fillStyle = TILE_COLORS[tileType];
+            const baseColor = TILE_COLORS[tileType];
+            
+            const lightLevel = getLight(x, y) / MAX_LIGHT;
+            
+            if (tileType === TILES.AIR && lightLevel === 0) {
+                ctx.fillStyle = '#000000';
+            } else {
+                ctx.fillStyle = blendColor(baseColor, lightLevel);
+            }
+            
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
     }
 
     ctx.fillStyle = '#FF0000';
     ctx.fillRect(player.x, player.y, player.width, player.height);
-
+    
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
@@ -848,7 +1029,6 @@ function draw() {
     if (!isCraftingOpen && !isFurnaceOpen) {
         drawHotbar();
     }
-    
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '16px Arial';
     ctx.textAlign = "right";
@@ -856,13 +1036,11 @@ function draw() {
     const tY = toTileCoord(player.y + player.height / 2);
     ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
     ctx.textAlign = "left";
-    
     if (isCraftingOpen) {
         drawCraftingUI();
     } else if (isFurnaceOpen) {
         drawFurnaceUI();
     }
-    
     if (mouse.heldItem) {
         ctx.fillStyle = TILE_COLORS[mouse.heldItem.id];
         ctx.fillRect(mouse.x - (SLOT_SIZE/2) + 4, mouse.y - (SLOT_SIZE/2) + 4, SLOT_SIZE - 8, SLOT_SIZE - 8);
@@ -942,8 +1120,7 @@ function drawCraftingUI() {
     ctx.font = '30px Arial';
     ctx.fillText('->', craftGridX + 3 * (s+p), outputY + s/1.5);
     const invGridWidth = 9 * (s + p) - p;
-    // --- BUG FIX HERE ---
-    const invGridX = (canvas.width / 2) - (invGridWidth / 2); // Was canvas.world
+    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
     const invGridY = (canvas.height / 2) + 20;
     drawPlayerInventoryUI(invGridX, invGridY);
 }
@@ -982,7 +1159,7 @@ function drawFurnaceUI() {
     ctx.fillRect(fuelX, fuelY - 8, s, 4);
     if(furnaceFuelTime > 0) {
         ctx.fillStyle = '#FF6347';
-        const maxFuel = FUEL_TIMES[Object.keys(FUEL_TIMES).find(k => furnaceFuelTime < FUEL_TIMES[k])] || 800;
+        const maxFuel = FUEL_TIMES[Object.keys(FUEL_TIMES).find(e=>furnaceFuelTime<FUEL_TIMES[e])] || 800;
         const progress = furnaceFuelTime / maxFuel;
         ctx.fillRect(fuelX, fuelY - 8, s * progress, 4);
     }
@@ -1017,16 +1194,12 @@ function gameLoop() {
 // --- 13. Start the Game ---
 function init() {
     console.log("Initializing game...");
-    
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
-    
     player.x = spawnX * TILE_SIZE;
     player.y = spawnY * TILE_SIZE - player.height;
-    
     camera.x = player.x - (canvas.width / 2) + (player.width / 2);
     camera.y = player.y - (canvas.height / 2);
-    
     const playerChunkX = Math.floor(spawnX / CHUNK_SIZE);
     const playerChunkY = Math.floor(spawnY / CHUNK_SIZE);
     const renderDist = 2;
@@ -1035,6 +1208,11 @@ function init() {
             getOrCreateChunk(cx, cy);
         }
     }
+    
+    // Initial light propagation
+    console.log("Propagating initial light...");
+    processLightQueue();
+    console.log("Light propagated.");
     
     setupInputListeners();
     resizeCanvas();
