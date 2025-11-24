@@ -4,7 +4,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 // --- 2. World Configuration ---
-const TILE_SIZE = 10;
+const TILE_SIZE = 20;
 const WORLD_WIDTH_TILES = 100;
 const WORLD_HEIGHT_TILES = 60;
 const TILES = {
