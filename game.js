@@ -240,18 +240,48 @@ function findSurfaceY(globalX) {
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 
+/**
+ * REFACTORED: Now generates a tree with a visible trunk
+ */
 function generateTree(x, y) {
-    const trunkHeight = Math.floor(Math.random() * 3) + 4;
+    const trunkHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks high
+    
+    // 1. Place trunk
     for (let i = 0; i < trunkHeight; i++) {
+        // Place wood, going up
         setTile(x, y - i, TILES.WOOD_LOG);
     }
-    const topY = y - trunkHeight;
-    for (let ly = -2; ly <= 2; ly++) {
-        for (let lx = -2; lx <= 2; lx++) {
-            if (lx === 0 && ly > 0) continue;
-            if (getTile(x + lx, topY + ly) === TILES.AIR) {
-                setTile(x + lx, topY + ly, TILES.LEAVES);
-            }
+
+    // 2. Place leaves
+    // Find the Y-coordinate of the block just *above* the trunk
+    const leafBaseY = y - trunkHeight;
+
+    // We'll make a simple "pine tree" shape
+    
+    // Top-most leaf
+    if (getTile(x, leafBaseY - 2) === TILES.AIR) {
+        setTile(x, leafBaseY - 2, TILES.LEAVES);
+    }
+    
+    // 3-wide row
+    for (let lx = -1; lx <= 1; lx++) {
+        if (getTile(x + lx, leafBaseY - 1) === TILES.AIR) {
+            setTile(x + lx, leafBaseY - 1, TILES.LEAVES);
+        }
+    }
+    
+    // 5-wide row
+    // We check lx !== 0 to avoid overwriting the trunk if it's tall
+    for (let lx = -2; lx <= 2; lx++) {
+        if (getTile(x + lx, leafBaseY) === TILES.AIR && lx !== 0) {
+            setTile(x + lx, leafBaseY, TILES.LEAVES);
+        }
+    }
+    
+    // 5-wide row (base of leaves)
+    for (let lx = -2; lx <= 2; lx++) {
+         if (getTile(x + lx, leafBaseY + 1) === TILES.AIR && lx !== 0) {
+            setTile(x + lx, leafBaseY + 1, TILES.LEAVES);
         }
     }
 }
