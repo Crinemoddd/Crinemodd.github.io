@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.6 (Player Sprite & Animation) ---
+// --- GAME MAKER: v10.8 (Tree Collision & Crafting Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -55,6 +55,8 @@ function getBlockOpacity(tileId) {
     return BLOCK_OPACITY[tileId] ?? 16;
 }
 function isBlockSolid(tileId) {
+    // This function is for LIGHTING.
+    // isTileSolid() is for PHYSICS.
     return getBlockOpacity(tileId) >= 16;
 }
 
@@ -62,12 +64,37 @@ const MAX_STACK = 64;
 const BLOCK_TIER = {
     [TILES.DIRT]: 0, [TILES.GRASS]: 0, [TILES.WOOD_LOG]: 0, [TILES.LEAVES]: 0,
     [TILES.STONE]: 1, [TILES.COAL]: 1, [TILES.COPPER]: 2, [TILES.IRON]: 2,
-    [TILES.DIAMOND]: 3, [TILES.COBALT]: 4, [TILES.PLATINUM]: 5
+    [TILES.DIAMOND]: 3, [TILES.COBALT]: 4, [TILES.PLATINUM]: 5,
+    [TILES.CRAFTING_TABLE]: 0, [TILES.FURNACE]: 1, [TILES.TORCH]: 0
 };
 const TOOL_TIER = {
-    [TILES.WOOD_PICKAXE]: 1, [TILES.STONE_PICKAXE]: 2, [TILES.COPPER_PICKAXE]: 3,
-    [TILES.IRON_PICKAXE]: 3, [TILES.DIAMOND_PICKAXE]: 4, [TILES.COBALT_PICKAXE]: 5,
+    [TILES.WOOD_PICKAXE]: 1,
+    [TILES.STONE_PICKAXE]: 2,
+    [TILES.COPPER_PICKAXE]: 3,
+    [TILES.IRON_PICKAXE]: 3,
+    [TILES.DIAMOND_PICKAXE]: 4,
+    [TILES.COBALT_PICKAXE]: 5,
     [TILES.PLATINUM_PICKAXE]: 6
+};
+
+const BLOCK_HARDNESS = {
+    [TILES.GRASS]: 10, [TILES.DIRT]: 10,
+    [TILES.WOOD_LOG]: 20, [TILES.LEAVES]: 2,
+    [TILES.STONE]: 30, [TILES.COAL]: 35,
+    [TILES.COPPER]: 40, [TILES.IRON]: 40,
+    [TILES.DIAMOND]: 60, [TILES.COBALT]: 70,
+    [TILES.PLATINUM]: 80,
+    [TILES.CRAFTING_TABLE]: 20, [TILES.FURNACE]: 30,
+    [TILES.TORCH]: 1
+};
+const TOOL_POWER = {
+    [TILES.WOOD_PICKAXE]: 2,
+    [TILES.STONE_PICKAXE]: 3,
+    [TILES.COPPER_PICKAXE]: 4,
+    [TILES.IRON_PICKAXE]: 4,
+    [TILES.DIAMOND_PICKAXE]: 6,
+    [TILES.COBALT_PICKAXE]: 8,
+    [TILES.PLATINUM_PICKAXE]: 10,
 };
 
 const worldChunks = new Map();
@@ -80,15 +107,26 @@ let player = {
     height: TILE_SIZE * 1.8,
     vx: 0, vy: 0,
     isOnGround: false,
-    // --- NEW: Animation state ---
-    direction: 1, // 1 for right, -1 for left
-    state: 'idle', // 'idle', 'walking', 'jumping'
+    direction: 1,
+    state: 'idle',
     animationFrame: 0,
     animationTimer: 0
 };
 let camera = { x: 0, y: 0 };
 let keys = { w: false, a: false, d: false, e: false };
-let mouse = { x: 0, y: 0, tileX: 0, tileY: 0, heldItem: null };
+let mouse = {
+    x: 0, y: 0,
+    tileX: 0, tileY: 0,
+    isDown: false,
+    heldItem: null
+};
+let miningState = {
+    isMining: false,
+    tileX: 0,
+    tileY: 0,
+    progress: 0,
+    requiredTime: 0
+};
 const GRAVITY = 0.3;
 const JUMP_STRENGTH = -8;
 const MOVE_SPEED = 3;
@@ -352,9 +390,7 @@ function generateTreeInChunk(chunk, x, y) {
             chunk[currentY][x] = TILES.WOOD_LOG;
         }
     }
-
     const leafBaseY = y - trunkHeight;
-
     const setLeaf = (lx, ly) => {
         const newX = x + lx;
         const newY = ly;
@@ -363,7 +399,6 @@ function generateTreeInChunk(chunk, x, y) {
         }
     };
     
-    // --- FIXES APPLIED HERE ---
     if (leafBaseY - 2 >= 0) {
         setLeaf(0, leafBaseY - 2);
     }
@@ -470,7 +505,10 @@ function setupInputListeners() {
             }
             keys.e = true;
         }
-        if (e.key >= '1' && e.key <= '9') selectedSlot = parseInt(e.key) - 1;
+        if (e.key >= '1' && e.key <= '9') {
+            selectedSlot = parseInt(e.key) - 1;
+            stopMining();
+        }
     });
     window.addEventListener('keyup', (e) => {
         if (e.key === 'w' || e.key === 'W' || e.key === ' ') keys.w = false;
@@ -478,27 +516,49 @@ function setupInputListeners() {
         if (e.key === 'd' || e.key === 'D') keys.d = false;
         if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') keys.e = false;
     });
+    
+    window.addEventListener('mouseup', (e) => {
+        mouse.isDown = false;
+        stopMining();
+    });
 
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         mouse.x = e.clientX - rect.left;
         mouse.y = e.clientY - rect.top;
+
+        const oldTileX = mouse.tileX;
+        const oldTileY = mouse.tileY;
+
         let mouseWorldX = mouse.x + camera.x;
         let mouseWorldY = mouse.y + camera.y;
         mouse.tileX = toTileCoord(mouseWorldX);
         mouse.tileY = toTileCoord(mouseWorldY);
+
+        if (mouse.tileX !== oldTileX || mouse.tileY !== oldTileY) {
+            stopMining();
+            if (mouse.isDown && !isCraftingOpen && !isFurnaceOpen) {
+                startMining(mouse.tileX, mouse.tileY);
+            }
+        }
     });
     
     canvas.addEventListener('mousedown', (e) => {
         e.preventDefault();
+        mouse.isDown = true;
         const isShiftClick = e.shiftKey;
+        
         if (isCraftingOpen) {
             handleInventoryClick(e.button, 'crafting', isShiftClick);
         } else if (isFurnaceOpen) {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
-            if (e.button === 0) mineBlock();
-            if (e.button === 2) handleRightClick();
+            if (e.button === 0) {
+                startMining(mouse.tileX, mouse.tileY);
+            }
+            if (e.button === 2) {
+                handleRightClick();
+            }
         }
     });
     
@@ -512,6 +572,7 @@ function setupInputListeners() {
             selectedSlot--;
             if (selectedSlot < 0) selectedSlot = 8;
         }
+        stopMining();
     });
     window.addEventListener('resize', resizeCanvas);
 }
@@ -522,6 +583,47 @@ function resizeCanvas() {
 }
 
 // --- 8. Interaction Logic ---
+function startMining(x, y) {
+    const tileType = getTile(x, y);
+    if (tileType === TILES.AIR) {
+        stopMining();
+        return;
+    }
+
+    const playerTileX = toTileCoord(player.x + player.width / 2);
+    const playerTileY = toTileCoord(player.y + player.height / 2);
+    const dist = Math.sqrt(Math.pow(playerTileX - x, 2) + Math.pow(playerTileY - y, 2));
+    if (dist > INTERACTION_RANGE) {
+        stopMining();
+        return;
+    }
+    
+    const requiredTier = BLOCK_TIER[tileType] ?? 0;
+    const heldSlot = hotbarSlots[selectedSlot];
+    const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
+
+    if (toolTier < requiredTier) {
+        console.log("Tool not strong enough!");
+        stopMining();
+        return;
+    }
+    
+    const hardness = BLOCK_HARDNESS[tileType] ?? 10;
+    const toolPower = heldSlot ? (TOOL_POWER[heldSlot.id] ?? 1) : 1;
+    
+    miningState.isMining = true;
+    miningState.tileX = x;
+    miningState.tileY = y;
+    miningState.progress = 0;
+    miningState.requiredTime = Math.max(5, (hardness * 10) / toolPower); 
+}
+
+function stopMining() {
+    miningState.isMining = false;
+    miningState.progress = 0;
+}
+
+
 function updateSunlightColumn(tileX) {
     let sunBlocked = false;
     let surfaceY = findSurfaceY(tileX);
@@ -566,37 +668,6 @@ function handleRightClick() {
         isCraftingOpen = false; isFurnaceOpen = true;
     } else if (block === TILES.AIR || (slot && slot.id === TILES.TORCH && !isBlockSolid(block))) {
         placeBlock();
-    }
-}
-
-function mineBlock() {
-    const playerTileX = toTileCoord(player.x + player.width / 2);
-    const playerTileY = toTileCoord(player.y + player.height / 2);
-    const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
-    if (dist > INTERACTION_RANGE) return;
-    
-    const tileType = getTile(mouse.tileX, mouse.tileY);
-    if (tileType === TILES.AIR) return;
-    
-    const requiredTier = BLOCK_TIER[tileType] ?? 0;
-    const heldSlot = hotbarSlots[selectedSlot];
-    const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
-    
-    if (toolTier >= requiredTier) {
-        addBlockToInventory(tileType);
-        setTile(mouse.tileX, mouse.tileY, TILES.AIR);
-        
-        if (tileType === TILES.TORCH) {
-            setLight(mouse.tileX, mouse.tileY, 0);
-        } else if (isBlockSolid(tileType)) {
-            updateSunlightColumn(mouse.tileX);
-            lightQueue.push([mouse.tileX + 1, mouse.tileY]);
-            lightQueue.push([mouse.tileX - 1, mouse.tileY]);
-            lightQueue.push([mouse.tileX, mouse.tileY + 1]);
-            lightQueue.push([mouse.tileX, mouse.tileY - 1]);
-        }
-    } else {
-        console.log(`Need tier ${requiredTier} pickaxe!`);
     }
 }
 
@@ -762,6 +833,9 @@ function consumeCraftingMaterials(uiType, setter) {
     }
 }
 
+/**
+ * --- REPLACED: This is the new, flexible crafting logic ---
+ */
 function checkCrafting() {
     craftingOutput = null;
     const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
@@ -798,22 +872,40 @@ function checkCrafting() {
             const pHeight = pattern.length;
             const pWidth = pattern[0].length;
             
-            let match = true;
-            for(let y=0; y<3; y++) {
-                for(let x=0; x<3; x++) {
-                    const gridIndex = y * 3 + x;
-                    const gridId = gridIds[gridIndex];
-                    const patternId = (y < pHeight && x < pWidth) ? pattern[y][x] : null;
-                    if (gridId !== patternId) {
-                        match = false;
-                        break;
+            // Iterate through all possible top-left starting positions
+            for (let startY = 0; startY <= 3 - pHeight; startY++) {
+                for (let startX = 0; startX <= 3 - pWidth; startX++) {
+                    
+                    let match = true;
+                    // Check the whole 3x3 grid
+                    for (let gridY = 0; gridY < 3; gridY++) {
+                        for (let gridX = 0; gridX < 3; gridX++) {
+                            const gridIndex = gridY * 3 + gridX;
+                            const gridId = gridIds[gridIndex];
+                            
+                            // Find corresponding pattern coordinates
+                            const patternX = gridX - startX;
+                            const patternY = gridY - startY;
+                            
+                            let patternId = null;
+                            if (patternX >= 0 && patternX < pWidth && patternY >= 0 && patternY < pHeight) {
+                                // This grid cell is *inside* the pattern
+                                patternId = pattern[patternY][patternX];
+                            }
+                            
+                            if (gridId !== patternId) {
+                                match = false;
+                                break;
+                            }
+                        }
+                        if (!match) break;
+                    }
+                    
+                    if (match) {
+                        craftingOutput = { ...recipe.output };
+                        return; // Found a match!
                     }
                 }
-                if (!match) break;
-            }
-            if (match) {
-                craftingOutput = { ...recipe.output };
-                return;
             }
         }
     }
@@ -912,7 +1004,6 @@ function update() {
         player.vx = 0; player.vy = 0;
     }
 
-    // --- NEW: Animation State ---
     if (!player.isOnGround) {
         player.state = 'jumping';
     } else if (keys.a || keys.d) {
@@ -923,29 +1014,55 @@ function update() {
         player.state = 'idle';
     }
 
-    // Update animation timer
     player.animationTimer++;
-    if (player.animationTimer > 8) { // Adjust this number to change walk speed
+    if (player.animationTimer > 8) {
         player.animationTimer = 0;
         player.animationFrame++;
-        if (player.animationFrame > 3) { // 4 frames (0, 1, 2, 3)
+        if (player.animationFrame > 3) {
             player.animationFrame = 0;
         }
     }
-    
     if (player.state === 'idle' || player.state === 'jumping') {
-        player.animationFrame = 0; // Reset frame if not walking
+        player.animationFrame = 0;
     }
     
     if (isFurnaceOpen) {
         updateFurnace();
     }
+
+    if (miningState.isMining) {
+        const playerTileX = toTileCoord(player.x + player.width / 2);
+        const playerTileY = toTileCoord(player.y + player.height / 2);
+        const dist = Math.sqrt(Math.pow(playerTileX - miningState.tileX, 2) + Math.pow(playerTileY - miningState.tileY, 2));
+        
+        if (!mouse.isDown || dist > INTERACTION_RANGE) {
+            stopMining();
+        } else {
+            miningState.progress++;
+            if (miningState.progress >= miningState.requiredTime) {
+                const tileType = getTile(miningState.tileX, miningState.tileY);
+                
+                addBlockToInventory(tileType);
+                setTile(miningState.tileX, miningState.tileY, TILES.AIR);
+                
+                if (tileType === TILES.TORCH) {
+                    setLight(miningState.tileX, miningState.tileY, 0);
+                } else if (isBlockSolid(tileType)) {
+                    updateSunlightColumn(miningState.tileX);
+                    lightQueue.push([miningState.tileX + 1, miningState.tileY]);
+                    lightQueue.push([miningState.tileX - 1, miningState.tileY]);
+                    lightQueue.push([miningState.tileX, miningState.tileY + 1]);
+                    lightQueue.push([miningState.tileX, miningState.tileY - 1]);
+                }
+                
+                stopMining();
+            }
+        }
+    }
     
-    // --- Light Engine Processing ---
     processLightQueue();
     processRemoveQueue();
 
-    // Chunk Loading
     const playerChunkX = Math.floor(toTileCoord(player.x + player.width/2) / CHUNK_SIZE);
     const playerChunkY = Math.floor(toTileCoord(player.y + player.height/2) / CHUNK_SIZE);
     const renderDist = 2;
@@ -955,7 +1072,6 @@ function update() {
         }
     }
 
-    // Camera
     let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
     let targetCamY = player.y - (canvas.height / 2);
     camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
@@ -1008,9 +1124,18 @@ function processRemoveQueue() {
     }
 }
 
+/**
+ * --- MODIFIED: This function is for PHYSICS ---
+ */
 function isTileSolid(tileX, tileY) {
     const tileType = getTile(tileX, tileY);
-    return isBlockSolid(tileType);
+    
+    // Trees are not solid
+    if (tileType === TILES.WOOD_LOG || tileType === TILES.LEAVES) {
+        return false;
+    }
+    
+    return isBlockSolid(tileType); // Check if it's a "full" block
 }
 
 function toTileCoord(pixelCoord) {
@@ -1065,16 +1190,33 @@ function draw() {
         }
     }
 
-    // --- REPLACED: Draw player sprite ---
     drawPlayer();
     
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
-    if (dist <= INTERACTION_RANGE) {
+    if (dist <= INTERACTION_RANGE && getTile(mouse.tileX, mouse.tileY) !== TILES.AIR) {
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1;
         ctx.strokeRect(mouse.tileX * TILE_SIZE, mouse.tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+
+    if (miningState.isMining) {
+        const progress = miningState.progress / miningState.requiredTime;
+        // Draw 10-stage crack animation
+        const crackFrame = Math.floor(progress * 10);
+        if (crackFrame > 0) {
+            // This is a simple placeholder. We'll draw a white box that grows.
+            const crackWidth = TILE_SIZE * (crackFrame / 10);
+            const crackHeight = TILE_SIZE * (crackFrame / 10);
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + progress * 0.3})`;
+            ctx.fillRect(
+                miningState.tileX * TILE_SIZE + (TILE_SIZE - crackWidth) / 2, 
+                miningState.tileY * TILE_SIZE + (TILE_SIZE - crackHeight) / 2, 
+                crackWidth, 
+                crackHeight
+            );
+        }
     }
     
     ctx.restore();
@@ -1106,15 +1248,11 @@ function draw() {
     }
 }
 
-// --- NEW: Player Drawing Function ---
 function drawPlayer() {
     ctx.save();
-    // Translate to the center of the player for easy flipping
     ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
-    // Flip the canvas if facing left
     ctx.scale(player.direction, 1);
 
-    // Define player colors
     const skin = '#E0A07E';
     const shirt = '#4080A0';
     const pants = '#304060';
@@ -1125,49 +1263,52 @@ function drawPlayer() {
     const headSize = TILE_SIZE * 0.8;
     const bodyHeight = h - headSize;
     
-    // Y-offsets from the center
     const headY = -h / 2 + headSize / 2;
     const bodyY = headY + headSize / 2 + (bodyHeight * 0.6) / 2;
     const legY = bodyY + (bodyHeight * 0.6) / 2;
 
-    // Legs (drawn first)
     ctx.fillStyle = pants;
     const legHeight = bodyHeight * 0.4;
     const legWidth = w/2 * 0.7;
     
     if (player.state === 'walking') {
-        // 4-frame animation, 2 frames per leg position
-        const frame = Math.floor(player.animationFrame / 2); // 0 or 1
+        const frame = Math.floor(player.animationFrame / 2);
         if (frame === 0) {
-            // Left leg back, right leg front
-            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight * 0.9); // Back leg
-            ctx.fillRect(1, legY, legWidth, legHeight); // Front leg
+            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight * 0.9);
+            ctx.fillRect(1, legY, legWidth, legHeight);
         } else {
-            // Left leg front, right leg back
-            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight); // Front leg
-            ctx.fillRect(1, legY, legWidth, legHeight * 0.9); // Back leg
+            ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight);
+            ctx.fillRect(1, legY, legWidth, legHeight * 0.9);
         }
     } else {
-        // Idle or Jumping, legs are straight
         ctx.fillRect(-legWidth - 1, legY, legWidth, legHeight);
         ctx.fillRect(1, legY, legWidth, legHeight);
     }
     
-    // Body
     ctx.fillStyle = shirt;
     ctx.fillRect(-w/2 * 0.8, bodyY - (bodyHeight*0.6)/2, w*0.8, bodyHeight * 0.6);
 
-    // Head
     ctx.fillStyle = skin;
     ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize);
 
-    // Hair
     ctx.fillStyle = hair;
     ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize/3);
 
     ctx.restore();
 }
 
+function drawSlotContents(slot, x, y) {
+    const s = SLOT_SIZE;
+    if (slot) {
+        ctx.fillStyle = TILE_COLORS[slot.id];
+        ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(slot.count, x + s - 4, y + s - 4);
+        ctx.textAlign = 'left';
+    }
+}
 
 function drawHotbar() {
     const numSlots = 9;
@@ -1176,18 +1317,36 @@ function drawHotbar() {
     const totalWidth = numSlots * (slotSize + padding) - padding;
     const startX = (canvas.width / 2) - (totalWidth / 2);
     const startY = canvas.height - slotSize - 20;
+
     for (let i = 0; i < numSlots; i++) {
         const x = startX + i * (slotSize + padding);
         const y = startY;
         const slot = hotbarSlots[i];
-        drawSlot(slot, x, y);
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(x, y, slotSize, slotSize);
+
+        drawSlotContents(slot, x, y);
+        
+        ctx.strokeStyle = '#8B8B8B';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, slotSize, slotSize);
+
         if (i === selectedSlot) {
-            ctx.strokeStyle = '#FFFF00';
+            ctx.strokeStyle = '#FFFFFF';
             ctx.lineWidth = 3;
-            ctx.strokeRect(x - 1, y - 1, slotSize + 2, slotSize + 2);
+            ctx.strokeRect(x - 2, y - 2, slotSize + 4, slotSize + 4);
         }
     }
 }
+
+function drawSlot(slot, x, y) {
+    const s = SLOT_SIZE;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y, s, s);
+    drawSlotContents(slot, x, y);
+}
+
 
 function drawPlayerInventoryUI(startX, startY) {
     const s = SLOT_SIZE;
@@ -1286,20 +1445,6 @@ function drawFurnaceUI() {
     drawPlayerInventoryUI(invGridX, invGridY);
 }
 
-function drawSlot(slot, x, y) {
-    const s = SLOT_SIZE;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(x, y, s, s);
-    if (slot) {
-        ctx.fillStyle = TILE_COLORS[slot.id];
-        ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(slot.count, x + s - 4, y + s - 4);
-        ctx.textAlign = 'left';
-    }
-}
 
 // --- 12. Main Game Loop ---
 function gameLoop() {
@@ -1318,7 +1463,6 @@ function init() {
     camera.x = player.x - (canvas.width / 2) + (player.width / 2);
     camera.y = player.y - (canvas.height / 2);
     
-    // --- Pre-load initial chunks ---
     const playerChunkX = Math.floor(spawnX / CHUNK_SIZE);
     const playerChunkY = Math.floor(spawnY / CHUNK_SIZE);
     const renderDist = 2;
@@ -1328,7 +1472,6 @@ function init() {
         }
     }
     
-    // --- Prime the light queue ---
     console.log("Priming light queue...");
     for (const [key, chunk] of lightChunks.entries()) {
         const [chunkX, chunkY] = key.split(',').map(Number);
@@ -1343,7 +1486,6 @@ function init() {
         }
     }
     
-    // --- Propagate all initial light ---
     console.log(`Propagating initial light (${lightQueue.length} sources)...`);
     processLightQueue();
     console.log("Light propagated.");
