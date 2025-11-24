@@ -742,7 +742,7 @@ function update() {
     // POLISHED: Camera now uses smoothing (lerp)
     // 1. Find target
     let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
-    let targetCamY = player.y - (canvas.height / 2) + (player.height / 2);
+    let targetCamY = player.y - (canvas.height / 2);
     
     // 2. Clamp target to world bounds
     const maxCamX = WORLD_WIDTH_TILES * TILE_SIZE - canvas.width;
