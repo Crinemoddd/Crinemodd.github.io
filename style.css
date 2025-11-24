@@ -1,0 +1,12 @@
+/* Remove all default padding and margin from the page */
+html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Hide scrollbars */
+    background-color: #000; /* Black background for any tiny edges */
+}
+
+/* Make the canvas fill the entire screen */
+canvas {
+    display: block;
+}
