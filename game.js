@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.3 (Dynamic Spill Lighting - FIXED) ---
+// --- GAME MAKER: v10.5 (Fixed Tree Generation) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -44,7 +44,7 @@ const TILE_COLORS = {
 
 const BLOCK_OPACITY = {
     [TILES.AIR]: 1,
-    [TILES.LEAVES]: 2, // Leaves dim light
+    [TILES.LEAVES]: 2,
     [TILES.TORCH]: 1,
     [TILES.GRASS]: 16, [TILES.DIRT]: 16, [TILES.STONE]: 16, [TILES.IRON]: 16,
     [TILES.COPPER]: 16, [TILES.DIAMOND]: 16, [TILES.COBALT]: 16, [TILES.PLATINUM]: 16,
@@ -106,6 +106,7 @@ const COOK_TIME = 200;
 // --- Light Engine ---
 const MAX_LIGHT = 15;
 const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
+const MIN_GLOBAL_LIGHT = 1;
 let lightQueue = [];
 let removeQueue = [];
 
@@ -333,8 +334,13 @@ function findSurfaceY(globalX) {
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 
+/**
+ * REPLACED: This is the new generateTreeInChunk function with bug fixes
+ */
 function generateTreeInChunk(chunk, x, y) {
     const trunkHeight = Math.floor(Math.random() * 3) + 4;
+    
+    // 1. Place trunk
     for (let i = 0; i < trunkHeight; i++) {
         const currentY = y - i;
         if (currentY < 0) break;
@@ -342,7 +348,9 @@ function generateTreeInChunk(chunk, x, y) {
             chunk[currentY][x] = TILES.WOOD_LOG;
         }
     }
-    const leafBaseY = y - trunkHeight;
+
+    const leafBaseY = y - trunkHeight; // Y-coord *above* the trunk
+
     const setLeaf = (lx, ly) => {
         const newX = x + lx;
         const newY = ly;
@@ -350,11 +358,40 @@ function generateTreeInChunk(chunk, x, y) {
             chunk[newY][newX] = TILES.LEAVES;
         }
     };
-    setLeaf(0, leafBaseY - 2);
-    setLeaf(-1, leafBaseY - 1); setLeaf(0, leafBaseY - 1); setLeaf(1, leafBaseY - 1);
-    setLeaf(-2, leafBaseY); setLeaf(-1, leafBaseY); setLeaf(1, leafBaseY); setLeaf(2, leafBaseY);
-    setLeaf(-2, leafBaseY + 1); setLeaf(-1, leafBaseY + 1); setLeaf(1, leafBaseY + 1); setLeaf(2, leafBaseY + 1);
+    
+    // --- FIXES APPLIED HERE ---
+
+    // Top-most leaf (Check if Y is valid)
+    if (leafBaseY - 2 >= 0) {
+        setLeaf(0, leafBaseY - 2);
+    }
+    
+    // 3-wide row (Check if Y is valid)
+    if (leafBaseY - 1 >= 0) {
+        setLeaf(-1, leafBaseY - 1);
+        setLeaf(0, leafBaseY - 1);
+        setLeaf(1, leafBaseY - 1);
+    }
+    
+    // 5-wide row (top) (Check if Y is valid)
+    if (leafBaseY >= 0) {
+        setLeaf(-2, leafBaseY);
+        setLeaf(-1, leafBaseY);
+        setLeaf(0, leafBaseY);  // <-- ADDED MISSING BLOCK
+        setLeaf(1, leafBaseY);
+        setLeaf(2, leafBaseY);
+    }
+
+    // 5-wide row (base) (Check if Y is valid)
+    if (leafBaseY + 1 >= 0) {
+        setLeaf(-2, leafBaseY + 1);
+        setLeaf(-1, leafBaseY + 1);
+        setLeaf(0, leafBaseY + 1); // <-- ADDED MISSING BLOCK
+        setLeaf(1, leafBaseY + 1);
+        setLeaf(2, leafBaseY + 1);
+    }
 }
+
 
 // --- 6. Inventory Helpers ---
 function addItemToInventory(itemStack) {
@@ -510,7 +547,6 @@ function updateSunlightColumn(tileX) {
         }
         
         if (tileId === TILES.TORCH) {
-            // Keep torch light, but add it to queue to be sure
             light = 14;
             lightQueue.push([tileX, y]);
         }
@@ -555,7 +591,7 @@ function mineBlock() {
         setTile(mouse.tileX, mouse.tileY, TILES.AIR);
         
         if (tileType === TILES.TORCH) {
-            setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
+            setLight(mouse.tileX, mouse.tileY, 0);
         } else if (isBlockSolid(tileType)) {
             updateSunlightColumn(mouse.tileX);
             lightQueue.push([mouse.tileX + 1, mouse.tileY]);
@@ -598,7 +634,7 @@ function placeBlock() {
         if (slot.id === TILES.TORCH) {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
-            setLight(mouse.tileX, mouse.tileY, 0); // Queues a light removal
+            setLight(mouse.tileX, mouse.tileY, 0);
             updateSunlightColumn(mouse.tileX);
         }
     }
@@ -632,7 +668,7 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             }
 
             if (isShiftClicking && arrayName !== 'craftingOut' && arrayName !== 'furnaceOut') {
-                quickMoveItem(slotArray, index, arrayName, setter); // BUG FIX: Pass arrayName
+                quickMoveItem(slotArray, index, arrayName, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -740,7 +776,6 @@ function checkCrafting() {
         const recipe = CRAFTING_RECIPES[key];
         
         if (recipe.type === 'shapeless') {
-            // --- BUG FIX ---
             let gridItems = gridIds.filter(id => id !== null);
             let recipeItems = [];
             recipe.input.forEach(item => {
@@ -988,25 +1023,25 @@ function draw() {
             const baseColor = TILE_COLORS[tileType];
             
             // --- THIS IS THE FIX ---
-            let lightLevel = getLight(x, y); // Get its own light
+            let lightLevel = getLight(x, y);
             if (isBlockSolid(tileType)) {
-                // If it's a solid block, check neighbors
                 const lightAbove = getLight(x, y - 1);
                 const lightBelow = getLight(x, y + 1);
                 const lightLeft = getLight(x - 1, y);
                 const lightRight = getLight(x + 1, y);
-                // Use the brightest neighbor
                 lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
             }
-            // --- END OF FIX ---
-
-            const finalLight = lightLevel / MAX_LIGHT;
             
-            if (tileType === TILES.AIR && finalLight === 0) {
-                ctx.fillStyle = '#000000';
+            // --- THIS IS THE NEW CHANGE ---
+            const finalLightLevel = Math.max(lightLevel, MIN_GLOBAL_LIGHT);
+            const finalLight = finalLightLevel / MAX_LIGHT;
+            
+            if (tileType === TILES.AIR && finalLightLevel === MIN_GLOBAL_LIGHT && lightLevel === 0) {
+                 ctx.fillStyle = '#000000'; // Only draw pitch black if it's unlit air
             } else {
                 ctx.fillStyle = blendColor(baseColor, finalLight);
             }
+            // --- END OF CHANGE ---
             
             ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
@@ -1212,7 +1247,7 @@ function init() {
         }
     }
     
-    // --- NEW: Prime the light queue ---
+    // --- Prime the light queue ---
     console.log("Priming light queue...");
     for (const [key, chunk] of lightChunks.entries()) {
         const [chunkX, chunkY] = key.split(',').map(Number);
