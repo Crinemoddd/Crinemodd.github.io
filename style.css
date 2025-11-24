@@ -3,7 +3,7 @@ html, body {
     margin: 0;
     padding: 0;
     overflow: hidden; /* Hide scrollbars */
-    background-color: #000; /* Black background for any tiny edges */
+    background-color: #333; /* CHANGED FROM #000 */
 }
 
 /* Make the canvas fill the entire screen */
