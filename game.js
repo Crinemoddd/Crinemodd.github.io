@@ -1,4 +1,4 @@
-// --- GAME MAKER: v8.1 (Infinite World - COMPLETE) ---
+// --- GAME MAKER: v8.2 (Fixed Trees) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -52,7 +52,7 @@ const TOOL_TIER = {
 };
 
 // --- NEW: Chunk-based World ---
-const worldChunks = new Map(); // Stores all generated chunks
+const worldChunks = new Map();
 
 // --- 3. Game State ---
 let player = {
@@ -162,9 +162,13 @@ function getChunkKey(chunkX, chunkY) {
     return `${chunkX},${chunkY}`;
 }
 
+/**
+ * REPLACED: This is the new generateChunk function with 2 passes
+ */
 function generateChunk(chunkX, chunkY) {
     let chunk = new Array(CHUNK_SIZE).fill(0).map(() => new Array(CHUNK_SIZE).fill(TILES.AIR));
     
+    // Pass 1: Generate Terrain
     for (let x = 0; x < CHUNK_SIZE; x++) {
         const globalX = chunkX * CHUNK_SIZE + x;
         let heightNoise = simplex.noise2D(globalX / TERRAIN_HEIGHT_SCALE, 0);
@@ -196,14 +200,23 @@ function generateChunk(chunkX, chunkY) {
                     chunk[y][x] = TILES.AIR;
                 }
             }
-            
-            if (chunk[y][x] === TILES.GRASS && Math.random() < 0.05) {
-                generateTree(globalX, globalY - 1);
+        }
+    }
+    
+    // Pass 2: Generate Trees
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+        for (let y = 0; y < CHUNK_SIZE; y++) {
+            if (chunk[y][x] === TILES.GRASS && y > 0 && chunk[y-1][x] === TILES.AIR) {
+                if (Math.random() < 0.05) {
+                    generateTreeInChunk(chunk, x, y - 1); // y-1 is the air block
+                }
             }
         }
     }
+
     return chunk;
 }
+
 
 function getOrCreateChunk(chunkX, chunkY) {
     const key = getChunkKey(chunkX, chunkY);
@@ -241,50 +254,54 @@ function findSurfaceY(globalX) {
 }
 
 /**
- * REFACTORED: Now generates a tree with a visible trunk
+ * REPLACED: This is the new generateTreeInChunk function
  */
-function generateTree(x, y) {
+function generateTreeInChunk(chunk, x, y) {
     const trunkHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks high
     
-    // 1. Place trunk
+    // 1. Place trunk (going up from y)
     for (let i = 0; i < trunkHeight; i++) {
-        // Place wood, going up
-        setTile(x, y - i, TILES.WOOD_LOG);
+        const currentY = y - i;
+        if (currentY < 0) break; // Stop if we hit top of chunk
+        if (chunk[currentY][x] === TILES.AIR) {
+            chunk[currentY][x] = TILES.WOOD_LOG;
+        }
     }
 
     // 2. Place leaves
-    // Find the Y-coordinate of the block just *above* the trunk
-    const leafBaseY = y - trunkHeight;
+    const leafBaseY = y - trunkHeight; // Y-coord *above* the trunk
 
-    // We'll make a simple "pine tree" shape
+    // Helper to safely set a leaf
+    const setLeaf = (lx, ly) => {
+        const newX = x + lx;
+        const newY = ly;
+        // Check chunk bounds (0-15) and if tile is AIR
+        if (newX >= 0 && newX < CHUNK_SIZE && newY >= 0 && newY < CHUNK_SIZE && chunk[newY][newX] === TILES.AIR) {
+            chunk[newY][newX] = TILES.LEAVES;
+        }
+    };
     
     // Top-most leaf
-    if (getTile(x, leafBaseY - 2) === TILES.AIR) {
-        setTile(x, leafBaseY - 2, TILES.LEAVES);
-    }
+    setLeaf(0, leafBaseY - 2);
     
     // 3-wide row
-    for (let lx = -1; lx <= 1; lx++) {
-        if (getTile(x + lx, leafBaseY - 1) === TILES.AIR) {
-            setTile(x + lx, leafBaseY - 1, TILES.LEAVES);
-        }
-    }
+    setLeaf(-1, leafBaseY - 1);
+    setLeaf(0, leafBaseY - 1);
+    setLeaf(1, leafBaseY - 1);
     
-    // 5-wide row
-    // We check lx !== 0 to avoid overwriting the trunk if it's tall
-    for (let lx = -2; lx <= 2; lx++) {
-        if (getTile(x + lx, leafBaseY) === TILES.AIR && lx !== 0) {
-            setTile(x + lx, leafBaseY, TILES.LEAVES);
-        }
-    }
-    
-    // 5-wide row (base of leaves)
-    for (let lx = -2; lx <= 2; lx++) {
-         if (getTile(x + lx, leafBaseY + 1) === TILES.AIR && lx !== 0) {
-            setTile(x + lx, leafBaseY + 1, TILES.LEAVES);
-        }
-    }
+    // 5-wide row (top)
+    setLeaf(-2, leafBaseY);
+    setLeaf(-1, leafBaseY);
+    setLeaf(1, leafBaseY);
+    setLeaf(2, leafBaseY);
+
+    // 5-wide row (base)
+    setLeaf(-2, leafBaseY + 1);
+    setLeaf(-1, leafBaseY + 1);
+    setLeaf(1, leafBaseY + 1);
+    setLeaf(2, leafBaseY + 1);
 }
+
 
 // --- 6. Inventory Helpers ---
 function addItemToInventory(itemStack) {
