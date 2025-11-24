@@ -1,7 +1,8 @@
+// --- GAME MAKER: v6 (Furnace & Tiers) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const simplex = new SimplexNoise();
+// NOTE: SimplexNoise is loaded from index.html
 
 // --- 2. World Configuration ---
 const TILE_SIZE = 10;
@@ -94,7 +95,15 @@ const TOOL_TIER = {
 let worldData = [];
 
 // --- 3. Game State ---
-let player = { /* ... (unchanged) ... */ };
+let player = {
+    x: (WORLD_WIDTH_TILES * TILE_SIZE) / 2, // Pixel position
+    y: 0,
+    width: TILE_SIZE * 0.8,
+    height: TILE_SIZE * 1.8,
+    vx: 0, // Velocity x
+    vy: 0, // Velocity y
+    isOnGround: false
+};
 let camera = { x: 0, y: 0 };
 let keys = { w: false, a: false, d: false, e: false };
 let mouse = { x: 0, y: 0, tileX: 0, tileY: 0, heldItem: null };
@@ -121,6 +130,9 @@ let furnaceOutput = null;
 let furnaceCookTime = 0; // Ticks remaining
 let furnaceFuelTime = 0; // Fuel ticks remaining
 const COOK_TIME = 200; // Ticks to cook one item
+
+// Initialize simplex noise (it's loaded in index.html)
+const simplex = new SimplexNoise();
 
 // --- 4. Recipe Databases ---
 // REFACTORED: Renamed and expanded
@@ -194,14 +206,33 @@ const FUEL_TIMES = {
 function generateWorld() {
     console.log("Generating world...");
     worldData = new Array(WORLD_HEIGHT_TILES).fill(0).map(() => new Array(WORLD_WIDTH_TILES).fill(TILES.AIR));
-    // ... (noise setup) ...
+    
+    let playerSpawnY = 0;
+    const playerSpawnX_Tile = Math.floor(WORLD_WIDTH_TILES / 2);
+    const baseHeight = 30;
+    const terrainHeightScale = 50;
+    const terrainHeightAmount = 15;
+    const oreNoiseScale = 10;
+    const caveNoiseScale = 25;
+
     for (let x = 0; x < WORLD_WIDTH_TILES; x++) {
-        // ... (terrain height) ...
+        let heightNoise = simplex.noise2D(x / terrainHeightScale, 0);
+        let surfaceY = Math.floor(baseHeight + heightNoise * terrainHeightAmount);
+
+        if (x === playerSpawnX_Tile) {
+            playerSpawnY = (surfaceY * TILE_SIZE) - player.height;
+        }
+
         for (let y = 0; y < WORLD_HEIGHT_TILES; y++) {
-            // ... (terrain gen) ...
-            if (y >= 35) { // Underground
+            if (y < surfaceY) {
+                worldData[y][x] = TILES.AIR;
+            } else if (y === surfaceY) {
+                worldData[y][x] = TILES.GRASS;
+            } else if (y > surfaceY && y < surfaceY + 5) {
+                worldData[y][x] = TILES.DIRT;
+            } else if (y >= surfaceY + 5) { // Underground
                 worldData[y][x] = TILES.STONE;
-                let oreNoise = simplex.noise2D(x / 10, y / 10);
+                let oreNoise = simplex.noise2D(x / oreNoiseScale, y / oreNoiseScale);
                 
                 // NEW: Added COAL
                 if (oreNoise > 0.6) worldData[y][x] = TILES.COAL;
@@ -211,20 +242,104 @@ function generateWorld() {
                 else if (oreNoise > 0.85) worldData[y][x] = TILES.COBALT;
                 else if (oreNoise > 0.9) worldData[y][x] = TILES.PLATINUM;
             }
-            // ... (cave gen) ...
+            
+            // Generate Caves
+            if (worldData[y][x] === TILES.DIRT || worldData[y][x] === TILES.STONE) {
+                let caveNoise = simplex.noise2D(x / caveNoiseScale, y / caveNoiseScale);
+                if (caveNoise > 0.6) {
+                    worldData[y][x] = TILES.AIR;
+                }
+            }
         }
     }
-    // ... (tree gen) ...
-    // ... (player spawn) ...
+    
+    // NEW: Generate Trees (after terrain)
+    for (let x = 0; x < WORLD_WIDTH_TILES; x++) {
+        for (let y = 0; y < WORLD_HEIGHT_TILES; y++) {
+            // If this is a grass block and a random check passes
+            if (worldData[y][x] === TILES.GRASS && Math.random() < 0.05) {
+                generateTree(x, y - 1); // Start tree one block above grass
+            }
+        }
+    }
+
+    player.x = playerSpawnX_Tile * TILE_SIZE;
+    player.y = playerSpawnY;
+    console.log("World generated.");
 }
-// ... (generateTree unchanged) ...
+
+// NEW: Function to grow a single tree
+function generateTree(x, y) {
+    const trunkHeight = Math.floor(Math.random() * 3) + 4; // 4-6 blocks high
+    // Place trunk
+    for (let i = 0; i < trunkHeight; i++) {
+        if (y - i < 0) continue; // Don't go off-world
+        worldData[y - i][x] = TILES.WOOD_LOG;
+    }
+    // Place leaves (a 5x5 blob)
+    const topY = y - trunkHeight;
+    for (let ly = -2; ly <= 2; ly++) {
+        for (let lx = -2; lx <= 2; lx++) {
+            if (lx === 0 && ly > 0) continue; // Don't overwrite trunk
+            const newX = x + lx;
+            const newY = topY + ly;
+            if (newX < 0 || newX >= WORLD_WIDTH_TILES || newY < 0 || newY >= WORLD_HEIGHT_TILES) continue;
+            if (worldData[newY][newX] === TILES.AIR) {
+                worldData[newY][newX] = TILES.LEAVES;
+            }
+        }
+    }
+}
 
 // --- 6. Inventory Helpers ---
-function addBlockToInventory(tileType) { /* ... (unchanged) ... */ }
-function removeBlockFromInventory(slotArray, slotIndex) { /* ... (unchanged) ... */ }
+function addBlockToInventory(tileType) {
+    if (tileType === TILES.AIR || tileType === TILES.LEAVES) return;
+    
+    // 1. Try to stack in hotbar
+    for (let i = 0; i < hotbarSlots.length; i++) {
+        let slot = hotbarSlots[i];
+        if (slot && slot.id === tileType && slot.count < MAX_STACK) {
+            slot.count++;
+            return;
+        }
+    }
+    // 2. Try to stack in main inventory
+    for (let i = 0; i < inventorySlots.length; i++) {
+        let slot = inventorySlots[i];
+        if (slot && slot.id === tileType && slot.count < MAX_STACK) {
+            slot.count++;
+            return;
+        }
+    }
+    // 3. Find empty hotbar slot
+    for (let i = 0; i < hotbarSlots.length; i++) {
+        if (hotbarSlots[i] === null) {
+            hotbarSlots[i] = { id: tileType, count: 1 };
+            return;
+        }
+    }
+    // 4. Find empty main inventory slot
+    for (let i = 0; i < inventorySlots.length; i++) {
+        if (inventorySlots[i] === null) {
+            inventorySlots[i] = { id: tileType, count: 1 };
+            return;
+        }
+    }
+}
+
+function removeBlockFromInventory(slotArray, slotIndex) {
+    let slot = slotArray[slotIndex];
+    if (slot) {
+        slot.count--;
+        if (slot.count <= 0) {
+            slotArray[slotIndex] = null; // Slot is now empty
+        }
+        return true;
+    }
+    return false;
+}
 
 // --- 7. Input Handlers ---
-// MODIFIED: 'e' key logic, mousedown logic
 function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
         if (isCraftingOpen || isFurnaceOpen) { // Don't move if UI is open
@@ -261,9 +376,16 @@ function setupInputListeners() {
         if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') keys.e = false;
     });
 
-    canvas.addEventListener('mousemove', (e) => { /* ... (unchanged) ... */ });
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = e.clientX - rect.left;
+        mouse.y = e.clientY - rect.top;
+        let mouseWorldX = mouse.x + camera.x;
+        let mouseWorldY = mouse.y + camera.y;
+        mouse.tileX = toTileCoord(mouseWorldX);
+        mouse.tileY = toTileCoord(mouseWorldY);
+    });
     
-    // MODIFIED: Mousedown checks for UI
     canvas.addEventListener('mousedown', (e) => {
         e.preventDefault();
         if (isCraftingOpen) {
@@ -277,22 +399,34 @@ function setupInputListeners() {
     });
     
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    window.addEventListener('wheel', (e) => { /* ... (unchanged) ... */ });
+    window.addEventListener('wheel', (e) => {
+        if (isCraftingOpen || isFurnaceOpen) return; // Don't scroll hotbar if UI is open
+        if (e.deltaY > 0) { // Scroll down
+            selectedSlot++;
+            if (selectedSlot > 8) selectedSlot = 0; // Wrap around
+        } else if (e.deltaY < 0) { // Scroll up
+            selectedSlot--;
+            if (selectedSlot < 0) selectedSlot = 8; // Wrap around
+        }
+    });
     window.addEventListener('resize', resizeCanvas);
 }
-function resizeCanvas() { /* ... (unchanged) ... */ }
+
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
 
 // --- 8. Interaction Logic ---
-
-// NEW: Central handler for right-click
 function handleRightClick() {
-    // Check range
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
     if (dist > INTERACTION_RANGE) return;
 
-    // Check if clicking a block
+    if (mouse.tileY < 0 || mouse.tileY >= WORLD_HEIGHT_TILES ||
+        mouse.tileX < 0 || mouse.tileX >= WORLD_WIDTH_TILES) return;
+
     const block = worldData[mouse.tileY][mouse.tileX];
     
     if (block === TILES.CRAFTING_TABLE) {
@@ -306,7 +440,6 @@ function handleRightClick() {
     }
 }
 
-// REFACTORED: Now uses mining tiers
 function mineBlock() {
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -319,19 +452,15 @@ function mineBlock() {
     const tileType = worldData[mouse.tileY][mouse.tileX];
     if (tileType === TILES.AIR) return;
     
-    // NEW: Progression Check
-    const requiredTier = BLOCK_TIER[tileType] ?? 0; // Get tier, default to 0
+    const requiredTier = BLOCK_TIER[tileType] ?? 0;
     
     const heldSlot = hotbarSlots[selectedSlot];
-    const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0; // Get tool tier, default to 0
+    const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
     
     if (toolTier >= requiredTier) {
-        // Can mine!
         addBlockToInventory(tileType);
         worldData[mouse.tileY][mouse.tileX] = TILES.AIR;
     } else {
-        // Can't mine!
-        // (Maybe play a "tink" sound)
         console.log(`Need tier ${requiredTier} pickaxe!`);
     }
 }
@@ -339,82 +468,143 @@ function mineBlock() {
 function placeBlock() {
     const slot = hotbarSlots[selectedSlot];
     if (!slot) return;
-    
-    // Can't place items that aren't blocks
-    if (slot.id >= 100) return; 
+    if (slot.id >= 100) return; // Can't place items
 
-    // ... (All other checks: range, air, player collision are UNCHANGED from Part 4) ...
-    // ...
+    // Check range (already done in handleRightClick, but good to double check)
+    const playerTileX = toTileCoord(player.x + player.width / 2);
+    const playerTileY = toTileCoord(player.y + player.height / 2);
+    const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
+    if (dist > INTERACTION_RANGE) return;
     
-    // All checks passed!
+    // Check if target tile is air
+    if (worldData[mouse.tileY][mouse.tileX] !== TILES.AIR) {
+        return; // Block already there
+    }
+
+    // Check for player collision (AABB)
+    const tilePixelX = mouse.tileX * TILE_SIZE;
+    const tilePixelY = mouse.tileY * TILE_SIZE;
+    
+    if (player.x < tilePixelX + TILE_SIZE &&
+        player.x + player.width > tilePixelX &&
+        player.y < tilePixelY + TILE_SIZE &&
+        player.y + player.height > tilePixelY) {
+        return; // Player is overlapping the block
+    }
+    
     if (removeBlockFromInventory(hotbarSlots, selectedSlot)) {
         worldData[mouse.tileY][mouse.tileX] = slot.id;
     }
 }
 
 // --- 9. Crafting & Furnace Logic ---
+const SLOT_SIZE = 36;
+const SLOT_PADDING = 4;
+let slotCoords = {}; // Will store {x, y} for all slots
 
-// REFACTORED: Central click handler
 function handleInventoryClick(button, uiType) {
-    // Find which slot was clicked
     for (const key in slotCoords) {
         const { x, y } = slotCoords[key];
         
         if (mouse.x > x && mouse.x < x + SLOT_SIZE &&
             mouse.y > y && mouse.y < y + SLOT_SIZE) {
             
-            const [arrayName, index] = key.split('-');
+            const [arrayName, indexStr] = key.split('-');
+            const index = parseInt(indexStr);
             let slotArray;
             
             if (arrayName === 'inv') slotArray = inventorySlots;
             else if (arrayName === 'hotbar') slotArray = hotbarSlots;
             else if (arrayName === 'crafting') slotArray = craftingGrid;
-            else if (arrayName === 'furnaceIn') slotArray = [furnaceInput];
-            else if (arrayName === 'furnaceFuel') slotArray = [furnaceFuel];
+            else if (arrayName === 'furnaceIn') {
+                handleSlotClick([furnaceInput], 0, button, (item) => furnaceInput = item); return;
+            }
+            else if (arrayName === 'furnaceFuel') {
+                handleSlotClick([furnaceFuel], 0, button, (item) => furnaceFuel = item); return;
+            }
             else if (arrayName === 'craftingOut') {
                 handleOutputClick(craftingOutput, 'crafting'); return;
             } else if (arrayName === 'furnaceOut') {
-                handleOutputClick(furnaceOutput, 'furnace'); return;
+                handleOutputClick(furnaceOutput, 'furnace', (item) => furnaceOutput = item); return;
             }
             
-            handleSlotClick(slotArray, index, button);
-            
-            if (uiType === 'crafting') checkCrafting();
+            if (slotArray) {
+                handleSlotClick(slotArray, index, button, (item) => slotArray[index] = item);
+                if (uiType === 'crafting') checkCrafting();
+            }
             return;
         }
     }
 }
 
-// REFACTORED: Now works with array references
-function handleSlotClick(slotArray, index, button) {
+function handleSlotClick(slotArray, index, button, setter) {
     let slot = slotArray[index];
     let held = mouse.heldItem;
-    // ... (This function's internal logic is UNCHANGED from Part 5) ...
-    // ... (It picks up, places, splits, and merges stacks) ...
+
+    if (button === 0) { // Left Click
+        if (held && !slot) { // Place stack
+            setter(held);
+            mouse.heldItem = null;
+        } else if (!held && slot) { // Pick up stack
+            mouse.heldItem = slot;
+            setter(null);
+        } else if (held && slot) {
+            if (held.id === slot.id && slot.count < MAX_STACK) { // Merge
+                let canTake = MAX_STACK - slot.count;
+                let willTake = Math.min(canTake, held.count);
+                slot.count += willTake;
+                held.count -= willTake;
+                if (held.count <= 0) mouse.heldItem = null;
+                setter(slot); // Update slot
+            } else { // Swap
+                mouse.heldItem = slot;
+                setter(held);
+            }
+        }
+    } else if (button === 2) { // Right Click
+        if (!held && slot) { // Pick up half
+            let half = Math.ceil(slot.count / 2);
+            mouse.heldItem = { id: slot.id, count: half };
+            slot.count -= half;
+            if (slot.count <= 0) setter(null);
+            else setter(slot);
+        } else if (held && !slot) { // Place one
+            setter({ id: held.id, count: 1 });
+            held.count--;
+            if (held.count <= 0) mouse.heldItem = null;
+        } else if (held && slot && held.id === slot.id && slot.count < MAX_STACK) { // Place one
+            slot.count++;
+            held.count--;
+            if (held.count <= 0) mouse.heldItem = null;
+            setter(slot);
+        }
+    }
 }
 
-// REFACTORED: Now generic
-function handleOutputClick(outputSlot, uiType) {
-    if (outputSlot && !mouse.heldItem) {
-        mouse.heldItem = outputSlot;
+function handleOutputClick(outputSlot, uiType, setter) {
+    if (outputSlot && (!mouse.heldItem || (mouse.heldItem.id === outputSlot.id && mouse.heldItem.count < MAX_STACK))) {
         
+        if (!mouse.heldItem) {
+             mouse.heldItem = { ...outputSlot };
+        } else {
+            mouse.heldItem.count += outputSlot.count;
+        }
+
         if (uiType === 'crafting') {
             craftingOutput = null;
-            // Consume crafting grid
             for (let i = 0; i < craftingGrid.length; i++) {
                 if (craftingGrid[i]) {
                     craftingGrid[i].count--;
                     if (craftingGrid[i].count <= 0) craftingGrid[i] = null;
                 }
             }
-            checkCrafting(); // Re-check
+            checkCrafting();
         } else if (uiType === 'furnace') {
-            furnaceOutput = null;
+            setter(null);
         }
     }
 }
 
-// REFACTORED: More robust pattern matching
 function checkCrafting() {
     craftingOutput = null;
     const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
@@ -423,13 +613,22 @@ function checkCrafting() {
         const recipe = CRAFTING_RECIPES[key];
         
         if (recipe.type === 'shapeless') {
-            // ... (Shapeless logic unchanged) ...
+            const input = recipe.input[0];
+            let count = 0;
+            let found = true;
+            for (const id of gridIds) {
+                if (id !== null && id !== input.id) found = false;
+                if (id === input.id) count++;
+            }
+            if (found && count === input.count) {
+                craftingOutput = { ...recipe.output };
+                return;
+            }
         } else if (recipe.type === 'shaped') {
             const pattern = recipe.pattern;
             const pHeight = pattern.length;
             const pWidth = pattern[0].length;
             
-            // This is a simple 1:1 match in the top-left
             let match = true;
             for(let y=0; y<pHeight; y++) {
                 for(let x=0; x<pWidth; x++) {
@@ -444,7 +643,6 @@ function checkCrafting() {
             }
             
             if (match) {
-                // Check if grid is empty outside the pattern
                 for(let i=0; i<9; i++) {
                     let y = Math.floor(i / 3);
                     let x = i % 3;
@@ -462,113 +660,245 @@ function checkCrafting() {
     }
 }
 
-function dropHeldItem() { /* ... (unchanged) ... */ }
+function dropHeldItem() {
+    mouse.heldItem = null;
+}
 
-// NEW: Furnace update logic
 function updateFurnace() {
-    if (!isFurnaceOpen) return;
-    
-    // 1. Has fuel, is cooking
-    if (furnaceFuelTime > 0 && furnaceCookTime > 0) {
-        furnaceCookTime--;
+    if (furnaceFuelTime > 0) {
         furnaceFuelTime--;
-        
-        // 1a. Cooking finished!
-        if (furnaceCookTime === 0) {
-            const resultId = SMELT_RECIPES[furnaceInput.id];
-            if (furnaceOutput === null) {
-                furnaceOutput = { id: resultId, count: 1 };
+    }
+
+    // 1. Check if cooking can start/continue
+    if (furnaceInput && SMELT_RECIPES[furnaceInput.id]) {
+        const resultId = SMELT_RECIPES[furnaceInput.id];
+        // Check if output is empty or can be stacked
+        if (furnaceOutput === null || (furnaceOutput.id === resultId && furnaceOutput.count < MAX_STACK)) {
+            // Check for fuel
+            if (furnaceFuelTime > 0) {
+                // Has fuel, continue cooking
+                if (furnaceCookTime > 0) {
+                    furnaceCookTime--;
+                } else {
+                    furnaceCookTime = COOK_TIME; // Start new cook
+                }
+            } else if (furnaceFuel && FUEL_TIMES[furnaceFuel.id]) {
+                // No fuel time, but has fuel item. Consume it.
+                furnaceFuelTime = FUEL_TIMES[furnaceFuel.id];
+                furnaceFuel.count--;
+                if (furnaceFuel.count <= 0) furnaceFuel = null;
+                furnaceCookTime = COOK_TIME;
             } else {
-                furnaceOutput.count++;
+                furnaceCookTime = 0; // No fuel, stop cooking
             }
-            // Consume input
-            furnaceInput.count--;
-            if (furnaceInput.count <= 0) furnaceInput = null;
-        }
-    }
-    
-    // 2. Has fuel, not cooking, but can cook
-    if (furnaceFuelTime > 0 && furnaceCookTime === 0) {
-        if (furnaceInput && SMELT_RECIPES[furnaceInput.id]) {
-            const resultId = SMELT_RECIPES[furnaceInput.id];
-            // Check if output stack is full
-            if (furnaceOutput === null || (furnaceOutput.id === resultId && furnaceOutput.count < MAX_STACK)) {
-                furnaceCookTime = COOK_TIME; // Start cooking
-            }
-        }
-    }
-    
-    // 3. No fuel, try to consume fuel
-    if (furnaceFuelTime <= 0) {
-        if (furnaceFuel && FUEL_TIMES[furnaceFuel.id]) {
-            furnaceFuelTime = FUEL_TIMES[furnaceFuel.id];
-            furnaceFuel.count--;
-            if (furnaceFuel.count <= 0) furnaceFuel = null;
         } else {
-            furnaceCookTime = 0; // Stop cooking if fuel runs out
+             furnaceCookTime = 0; // Output is full, stop
         }
+    } else {
+         furnaceCookTime = 0; // No input, stop
+    }
+
+    // 2. Check if cooking finished
+    if (furnaceCookTime === 1) { // At 1, not 0, to prevent off-by-one
+        const resultId = SMELT_RECIPES[furnaceInput.id];
+        if (furnaceOutput === null) {
+            furnaceOutput = { id: resultId, count: 1 };
+        } else {
+            furnaceOutput.count++;
+        }
+        
+        furnaceInput.count--;
+        if (furnaceInput.count <= 0) furnaceInput = null;
+        
+        furnaceCookTime = 0; // Reset
     }
 }
 
+
 // --- 10. Game Loop (Update Logic) ---
 function update() {
-    // MODIFIED: Pause player if UI is open
     if (!isCraftingOpen && !isFurnaceOpen) {
-        // ... (Player physics, input, collision logic UNCHANGED) ...
+        // Handle Input
+        if (keys.a) player.vx = -MOVE_SPEED;
+        else if (keys.d) player.vx = MOVE_SPEED;
+        else player.vx = 0;
+        if (keys.w && player.isOnGround) {
+            player.vy = JUMP_STRENGTH;
+            player.isOnGround = false;
+        }
+
+        // Apply Physics (Vertical)
+        player.vy += GRAVITY;
+        let newY = player.y + player.vy;
+        if (player.vy > 0) {
+            let tileX1 = toTileCoord(player.x);
+            let tileX2 = toTileCoord(player.x + player.width);
+            let tileY = toTileCoord(newY + player.height);
+            if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
+                player.vy = 0;
+                player.y = (tileY * TILE_SIZE) - player.height;
+                player.isOnGround = true;
+            } else {
+                player.y = newY;
+                player.isOnGround = false;
+            }
+        } else if (player.vy < 0) {
+            let tileX1 = toTileCoord(player.x);
+            let tileX2 = toTileCoord(player.x + player.width);
+            let tileY = toTileCoord(newY);
+            if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
+                player.vy = 0;
+                player.y = (tileY * TILE_SIZE) + TILE_SIZE;
+            } else {
+                player.y = newY;
+            }
+        }
+
+        // Apply Physics (Horizontal)
+        let newX = player.x + player.vx;
+        if (player.vx > 0) {
+            let tileX = toTileCoord(newX + player.width);
+            let tileY1 = toTileCoord(player.y);
+            let tileY2 = toTileCoord(player.y + player.height - 1);
+            if (isTileSolid(tileX, tileY1) || isTileSolid(tileX, tileY2)) {
+                player.vx = 0;
+                player.x = (tileX * TILE_SIZE) - player.width;
+            } else {
+                player.x = newX;
+            }
+        } else if (player.vx < 0) {
+            let tileX = toTileCoord(newX);
+            let tileY1 = toTileCoord(player.y);
+            let tileY2 = toTileCoord(player.y + player.height - 1);
+            if (isTileSolid(tileX, tileY1) || isTileSolid(tileX, tileY2)) {
+                player.vx = 0;
+                player.x = (tileX * TILE_SIZE) + TILE_SIZE;
+            } else {
+                player.x = newX;
+            }
+        }
     } else {
-        // Stop player movement
         player.vx = 0;
         player.vy = 0;
     }
     
-    // NEW: Update furnace
     if (isFurnaceOpen) {
         updateFurnace();
     }
     
-    // Update Camera (always update)
-    // ... (Camera logic unchanged) ...
+    // Update Camera
+    camera.x = player.x - (canvas.width / 2) + (player.width / 2);
+    camera.y = player.y - (canvas.height / 2) + (player.height / 2);
+    const maxCamX = WORLD_WIDTH_TILES * TILE_SIZE - canvas.width;
+    const maxCamY = WORLD_HEIGHT_TILES * TILE_SIZE - canvas.height;
+    camera.x = Math.max(0, Math.min(camera.x, maxCamX));
+    camera.y = Math.max(0, Math.min(camera.y, maxCamY));
+}
+
+function isTileSolid(tileX, tileY) {
+    if (tileY < 0 || tileY >= WORLD_HEIGHT_TILES || tileX < 0 || tileX >= WORLD_WIDTH_TILES) {
+        return true;
+    }
+    const tileType = worldData[tileY][tileX];
+    return tileType !== TILES.AIR;
+}
+
+function toTileCoord(pixelCoord) {
+    return Math.floor(pixelCoord / TILE_SIZE);
 }
 
 // --- 11. Game Loop (Drawing) ---
-const SLOT_SIZE = 36;
-const SLOT_PADDING = 4;
-let slotCoords = {}; // Stores {x, y} for all slots
-
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // --- START CAMERA ---
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
-    // ... (Draw World, Player, Mouse Highlight UNCHANGED) ...
+
+    const startTileX = toTileCoord(camera.x);
+    const endTileX = startTileX + toTileCoord(canvas.width) + 2;
+    const startTileY = toTileCoord(camera.y);
+    const endTileY = startTileY + toTileCoord(canvas.height) + 2;
+
+    for (let y = startTileY; y < endTileY; y++) {
+        for (let x = startTileX; x < endTileX; x++) {
+            if (y < 0 || y >= WORLD_HEIGHT_TILES || x < 0 || x >= WORLD_WIDTH_TILES) continue;
+            const tileType = worldData[y][x];
+            ctx.fillStyle = TILE_COLORS[tileType];
+            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+    }
+
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(player.x, player.y, player.width, player.height);
+
+    const playerTileX = toTileCoord(player.x + player.width / 2);
+    const playerTileY = toTileCoord(player.y + player.height / 2);
+    const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
+
+    if (dist <= INTERACTION_RANGE) {
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(mouse.tileX * TILE_SIZE, mouse.tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    }
+    
     ctx.restore();
     // --- END CAMERA ---
 
     // --- DRAW UI ---
     drawHotbar();
-    // ... (Draw coords unchanged) ...
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '16px Arial';
+    ctx.textAlign = "right";
+    const tX = toTileCoord(player.x + player.width / 2);
+    const tY = toTileCoord(player.y + player.height / 2);
+    ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
+    ctx.textAlign = "left";
     
     if (isCraftingOpen) {
         drawCraftingUI();
     } else if (isFurnaceOpen) {
-        drawFurnaceUI(); // NEW
+        drawFurnaceUI();
     }
     
     if (mouse.heldItem) {
-        // ... (Draw held item unchanged) ...
+        ctx.fillStyle = TILE_COLORS[mouse.heldItem.id];
+        ctx.fillRect(mouse.x - (SLOT_SIZE/2) + 4, mouse.y - (SLOT_SIZE/2) + 4, SLOT_SIZE - 8, SLOT_SIZE - 8);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(mouse.heldItem.count, mouse.x + SLOT_SIZE/2 - 4, mouse.y + SLOT_SIZE/2 - 4);
+        ctx.textAlign = 'left';
     }
 }
 
-// REFACTORED: drawHotbar is now unchanged
-function drawHotbar() { /* ... (unchanged) ... */ }
+function drawHotbar() {
+    const numSlots = 9;
+    const slotSize = SLOT_SIZE;
+    const padding = SLOT_PADDING;
+    const totalWidth = numSlots * (slotSize + padding) - padding;
+    const startX = (canvas.width / 2) - (totalWidth / 2);
+    const startY = canvas.height - slotSize - 20;
 
-// NEW: Draws the shared player inventory UI
+    for (let i = 0; i < numSlots; i++) {
+        const x = startX + i * (slotSize + padding);
+        const y = startY;
+        const slot = hotbarSlots[i];
+        drawSlot(slot, x, y);
+
+        if (i === selectedSlot) {
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x - 1, y - 1, slotSize + 2, slotSize + 2);
+        }
+    }
+}
+
 function drawPlayerInventoryUI(startX, startY) {
     const s = SLOT_SIZE;
     const p = SLOT_PADDING;
     
-    // Main Inventory (3x9)
     for (let y = 0; y < 3; y++) {
         for (let x = 0; x < 9; x++) {
             const i = y * 9 + x;
@@ -579,14 +909,13 @@ function drawPlayerInventoryUI(startX, startY) {
         }
     }
     
-    // Hotbar (1x9)
     const hotbarY = startY + 3 * (s + p) + 10;
     for (let x = 0; x < 9; x++) {
         const sx = startX + x * (s + p);
         const sy = hotbarY;
         slotCoords[`hotbar-${x}`] = { x: sx, y: sy };
         drawSlot(hotbarSlots[x], sx, sy);
-        if (x === selectedSlot) {
+        if (x === selectedSlot && !isCraftingOpen && !isFurnaceOpen) { // Only show selection if not in UI
             ctx.strokeStyle = '#FFFF00';
             ctx.lineWidth = 3;
             ctx.strokeRect(sx - 1, sy - 1, s + 2, s + 2);
@@ -594,7 +923,6 @@ function drawPlayerInventoryUI(startX, startY) {
     }
 }
 
-// MODIFIED: Uses the reusable player inventory
 function drawCraftingUI() {
     slotCoords = {};
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
@@ -603,7 +931,6 @@ function drawCraftingUI() {
     const s = SLOT_SIZE;
     const p = SLOT_PADDING;
     
-    // --- Crafting Grid (3x3) ---
     const craftGridX = (canvas.width / 2) - 100;
     const craftGridY = (canvas.height / 2) - 100;
     ctx.fillStyle = '#FFFFFF';
@@ -620,7 +947,6 @@ function drawCraftingUI() {
         }
     }
     
-    // --- Output Slot ---
     const outputX = craftGridX + 4 * (s + p);
     const outputY = craftGridY + (s + p);
     slotCoords['craftingOut-0'] = { x: outputX, y: outputY };
@@ -629,14 +955,12 @@ function drawCraftingUI() {
     ctx.font = '30px Arial';
     ctx.fillText('->', craftGridX + 3 * (s+p), outputY + s/1.5);
 
-    // --- Player Inventory ---
     const invGridWidth = 9 * (s + p) - p;
-    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
+    const invGridX = (canvas.world / 2) - (invGridWidth / 2);
     const invGridY = (canvas.height / 2) + 20;
     drawPlayerInventoryUI(invGridX, invGridY);
 }
 
-// NEW: UI for the furnace
 function drawFurnaceUI() {
     slotCoords = {};
     ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
@@ -645,26 +969,22 @@ function drawFurnaceUI() {
     const s = SLOT_SIZE;
     const p = SLOT_PADDING;
     
-    // --- Furnace Slots ---
     const furnaceX = (canvas.width / 2) - 100;
     const furnaceY = (canvas.height / 2) - 100;
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '18px Arial';
     ctx.fillText('Furnace', furnaceX, furnaceY - 10);
     
-    // Input
     const inputX = furnaceX;
     const inputY = furnaceY;
     slotCoords['furnaceIn-0'] = { x: inputX, y: inputY };
     drawSlot(furnaceInput, inputX, inputY);
     
-    // Fuel
     const fuelX = furnaceX;
     const fuelY = furnaceY + 2 * (s + p);
     slotCoords['furnaceFuel-0'] = { x: fuelX, y: fuelY };
     drawSlot(furnaceFuel, fuelX, fuelY);
     
-    // Output
     const outputX = furnaceX + 3 * (s + p);
     const outputY = furnaceY + 1 * (s + p);
     slotCoords['furnaceOut-0'] = { x: outputX, y: outputY };
@@ -692,19 +1012,38 @@ function drawFurnaceUI() {
         ctx.fillRect(fuelX, fuelY - 8, s * progress, 4);
     }
     
-
-    // --- Player Inventory ---
     const invGridWidth = 9 * (s + p) - p;
     const invGridX = (canvas.width / 2) - (invGridWidth / 2);
     const invGridY = (canvas.height / 2) + 20;
     drawPlayerInventoryUI(invGridX, invGridY);
 }
 
-// REFACTORED: drawSlot is now unchanged
-function drawSlot(slot, x, y) { /* ... (unchanged) ... */ }
+function drawSlot(slot, x, y) {
+    const s = SLOT_SIZE;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(x, y, s, s);
 
-// --- 12. Start the Game ---
+    if (slot) {
+        ctx.fillStyle = TILE_COLORS[slot.id];
+        ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(slot.count, x + s - 4, y + s - 4);
+        ctx.textAlign = 'left';
+    }
+}
+
+// --- 12. Main Game Loop ---
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// --- 13. Start the Game ---
 generateWorld();
 setupInputListeners();
 resizeCanvas();
-gameLoop();
+gameLoop(); // This is the line that was failing
