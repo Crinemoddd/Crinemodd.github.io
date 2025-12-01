@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.16 (2x2 Inventory, Armor Slots, UI Overhaul) ---
+// --- GAME MAKER: v10.17 (Pop-up UI & Steve Doll) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,13 +13,16 @@ const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
     COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
+    // Pickaxes
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
+    // Ingots
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111,
+    // Swords
     WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
     DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006
-    // Armor items will be added later (e.g., IRON_HELMET: 2000)
+    // Armor items will be added later
 };
 const TILE_NAMES = {
     [TILES.GRASS]: 'Grass', [TILES.DIRT]: 'Dirt', [TILES.STONE]: 'Stone', [TILES.IRON]: 'Iron Ore',
@@ -347,7 +350,7 @@ let hotbarSlots = new Array(9).fill(null);
 let inventorySlots = new Array(27).fill(null);
 let selectedSlot = 0;
 
-// --- NEW: UI States & Grids ---
+// --- MODIFIED: UI States & Grids ---
 let isInventoryOpen = false;
 let isCraftingTableOpen = false;
 let isFurnaceOpen = false;
@@ -710,7 +713,6 @@ function removeBlockFromInventory(slotArray, slotIndex) {
 // --- 7. Input Handlers ---
 function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
-        // --- MODIFIED: Check all UI states ---
         if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
              if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') {
                 if (!keys.e) {
@@ -728,7 +730,6 @@ function setupInputListeners() {
         if (e.key === 'd' || e.key === 'D') keys.d = true;
         if (e.key === 'e' || e.key === 'E') {
             if (!keys.e) {
-                // --- MODIFIED: 'E' opens Player Inventory ---
                 isInventoryOpen = true;
                 isCraftingTableOpen = false;
                 isFurnaceOpen = false;
@@ -786,7 +787,6 @@ function setupInputListeners() {
         mouse.isDown = true;
         const isShiftClick = e.shiftKey;
         
-        // --- MODIFIED: Check all UI states ---
         if (isInventoryOpen) {
             handleInventoryClick(e.button, 'inventory', isShiftClick);
         } else if (isCraftingTableOpen) {
@@ -864,6 +864,7 @@ function startMining(x, y) {
     const heldSlot = hotbarSlots[selectedSlot];
     const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
 
+    // Check if item is a sword
     const isSword = heldSlot && heldSlot.id >= 1000;
     
     if (toolTier < requiredTier || isSword) {
@@ -888,6 +889,7 @@ function stopMining() {
     miningState.progress = 0;
 }
 
+
 // --- REMOVED: updateSunlightColumn() ---
 
 function handleRightClick() {
@@ -905,7 +907,6 @@ function handleRightClick() {
         return;
     }
     
-    // --- MODIFIED: Check for UI opens ---
     if (block === TILES.CRAFTING_TABLE) {
         isCraftingTableOpen = true;
         isInventoryOpen = false;
@@ -953,6 +954,7 @@ function placeBlock() {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
             setLight(mouse.tileX, mouse.tileY, 0);
+            // --- LAG FIX: Removed updateSunlightColumn() ---
             // Nudge neighbors to recalculate sunlight
             const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
             if (lightAbove === AMBIENT_LIGHT_LEVEL) {
@@ -979,7 +981,6 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             if (arrayName === 'inv') { slotArray = inventorySlots; setter = (item) => inventorySlots[index] = item; }
             else if (arrayName === 'hotbar') { slotArray = hotbarSlots; setter = (item) => hotbarSlots[index] = item; }
             
-            // --- MODIFIED: Check which UI is open ---
             else if (uiType === 'inventory') {
                 if (arrayName === 'pCraft') { slotArray = playerCraftingGrid; setter = (item) => playerCraftingGrid[index] = item; }
                 else if (arrayName === 'pCraftOut') { handleOutputClick(playerCraftingOutput, 'playerCrafting', (item) => playerCraftingOutput = item, isShiftClicking); return; }
@@ -1017,7 +1018,6 @@ function quickMoveItem(slotArray, index, fromArea, setter) {
     if (!itemStack) return;
     let remainingStack = null;
     
-    // --- MODIFIED: Check fromArea ---
     if (fromArea === 'pCraft' || fromArea === 'tCraft' || fromArea === 'furnaceIn' || fromArea === 'furnaceFuel' || fromArea === 'furnaceOut' || fromArea === 'armor') {
         remainingStack = addItemToInventory(itemStack);
     } else if (fromArea === 'inv' || fromArea === 'hotbar') {
@@ -1026,7 +1026,6 @@ function quickMoveItem(slotArray, index, fromArea, setter) {
             else if (FUEL_TIMES[itemStack.id] && !furnaceFuel) furnaceFuel = itemStack;
             else remainingStack = addItemToInventory(itemStack);
         } else {
-            // Can't quick-move to armor slots yet, so just send to inventory
             remainingStack = addItemToInventory(itemStack);
         }
     }
@@ -1089,7 +1088,6 @@ function handleOutputClick(outputSlot, uiType, setter, isShiftClicking = false) 
 }
 
 function consumeCraftingMaterials(uiType, setter) {
-    // --- MODIFIED: Check which grid to consume from ---
     if (uiType === 'playerCrafting') {
         setter(null);
         for (let i = 0; i < playerCraftingGrid.length; i++) {
@@ -1113,7 +1111,6 @@ function consumeCraftingMaterials(uiType, setter) {
     }
 }
 
-// --- NEW: checkPlayerCrafting (2x2 grid) ---
 function checkPlayerCrafting() {
     playerCraftingOutput = null;
     const gridIds = playerCraftingGrid.map(slot => slot ? slot.id : null);
@@ -1150,7 +1147,6 @@ function checkPlayerCrafting() {
             const pHeight = pattern.length;
             const pWidth = pattern[0].length;
             
-            // --- Only check recipes that fit in a 2x2 grid ---
             if (pHeight > 2 || pWidth > 2) continue;
             
             for (let startY = 0; startY <= 2 - pHeight; startY++) {
@@ -1186,7 +1182,6 @@ function checkPlayerCrafting() {
     }
 }
 
-// --- RENAMED: from checkCrafting to checkTableCrafting (3x3 grid) ---
 function checkTableCrafting() {
     tableCraftingOutput = null;
     const gridIds = tableCraftingGrid.map(slot => slot ? slot.id : null);
@@ -1628,7 +1623,6 @@ function updateMining() {
                     setLight(miningState.tileX, miningState.tileY, 0);
                 } else if (isBlockSolid(tileType)) {
                     // --- LAG FIX: Removed updateSunlightColumn() ---
-                    // Nudge neighbors to recalculate light
                     const lightAbove = getLight(miningState.tileX, miningState.tileY - 1);
                     if (lightAbove === AMBIENT_LIGHT_LEVEL) {
                         setLight(miningState.tileX, miningState.tileY, AMBIENT_LIGHT_LEVEL);
@@ -1647,7 +1641,7 @@ function updateMining() {
 
 // --- Light Processing ---
 function processLightQueue() {
-    let limit = 250; // --- OPTIMIZATION: Was 1000 ---
+    let limit = 250;
     while (lightQueue.length > 0 && limit > 0) {
         limit--;
         const [x, y] = lightQueue.shift();
@@ -1668,7 +1662,7 @@ function processLightQueue() {
     }
 }
 function processRemoveQueue() {
-    let limit = 250; // --- OPTIMIZATION: Was 1000 ---
+    let limit = 250;
     while (removeQueue.length > 0 && limit > 0) {
         limit--;
         const [x, y, oldLevel] = removeQueue.shift();
@@ -1828,7 +1822,6 @@ function draw() {
     ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
     ctx.textAlign = "left";
     
-    // --- MODIFIED: Draw correct UI ---
     if (isInventoryOpen) {
         drawPlayerInventoryScreen();
     } else if (isCraftingTableOpen) {
@@ -2016,13 +2009,12 @@ function drawHotbar() {
 
 function drawSlot(slot, x, y) {
     const s = SLOT_SIZE;
-    ctx.fillStyle = '#707070'; // Dark grey slot
+    ctx.fillStyle = '#707070'; // MODIFIED: Solid dark grey
     ctx.fillRect(x, y, s, s);
     drawSlotContents(slot, x, y);
 }
 
-// --- RENAMED: from drawPlayerInventoryUI to drawMainInventory ---
-// This just draws the 3x9 + 1x9 inventory slots
+
 function drawMainInventory(startX, startY) {
     const s = SLOT_SIZE;
     const p = SLOT_PADDING;
@@ -2044,20 +2036,37 @@ function drawMainInventory(startX, startY) {
     }
 }
 
-// --- NEW: Player Inventory Screen (E) ---
 function drawPlayerInventoryScreen() {
     slotCoords = {};
-    ctx.fillStyle = '#C0C0C0'; // Solid light grey
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
     const s = SLOT_SIZE; const p = SLOT_PADDING;
+
+    // --- NEW: Pop-up window dimensions ---
+    const invGridWidth = 9 * (s + p) + p;
+    const uiWidth = invGridWidth + 100; // Width for inventory + crafting/armor
+    const uiHeight = (4 * (s + p) + p + 10) + 100; // Height for inv + crafting/armor
     
+    const startX = (canvas.width - uiWidth) / 2;
+    const startY = (canvas.height - uiHeight) / 2;
+    
+    // Draw the pop-up background
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(startX, startY, uiWidth, uiHeight);
+    // Border
+    ctx.strokeStyle = '#373737';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
+
+
     // --- 2x2 Crafting Grid ---
-    const craftGridX = (canvas.width / 2) + 20;
-    const craftGridY = (canvas.height / 2) - 100;
+    const craftGridX = startX + uiWidth - (2 * (s+p) + 40 + (s+p)) - 20;
+    const craftGridY = startY + 20;
+    
     ctx.fillStyle = '#000000';
-    ctx.font = '18px Arial';
-    ctx.fillText('Crafting', craftGridX, craftGridY - 10);
+    ctx.font = '16px Arial';
+    ctx.fillText('Crafting', craftGridX, craftGridY - 5);
     
     for (let y = 0; y < 2; y++) {
         for (let x = 0; x < 2; x++) {
@@ -2069,60 +2078,75 @@ function drawPlayerInventoryScreen() {
         }
     }
     
-    const outputX = craftGridX + 3 * (s + p);
+    const outputX = craftGridX + 2.5 * (s + p);
     const outputY = craftGridY + (s + p) / 2;
     slotCoords['pCraftOut-0'] = { x: outputX, y: outputY };
     drawSlot(playerCraftingOutput, outputX, outputY);
     
     ctx.fillStyle = '#000000';
-    ctx.font = '30px Arial';
-    ctx.fillText('->', craftGridX + 2 * (s+p) + 5, outputY + s/1.5);
+    ctx.font = '24px Arial';
+    ctx.fillText('->', craftGridX + 2 * (s+p) - 5, outputY + s/1.5);
 
     // --- Player Doll & Armor ---
-    const playerDollX = (canvas.width / 2) - 150;
-    const playerDollY = (canvas.height / 2) - 100;
+    const playerDollX = startX + 30;
+    const playerDollY = startY + 20;
     
-    // Draw simple player doll
+    // Draw "Steve" doll
+    ctx.fillStyle = '#623B20'; // Hair
+    ctx.fillRect(playerDollX, playerDollY, 40, 10);
     ctx.fillStyle = '#E0A07E'; // Skin
-    ctx.fillRect(playerDollX, playerDollY, s, s); // Head
-    ctx.fillStyle = '#4080A0'; // Shirt
-    ctx.fillRect(playerDollX, playerDollY + s, s, s * 1.5); // Body
+    ctx.fillRect(playerDollX, playerDollY + 10, 40, 10);
+    ctx.fillStyle = '#44AACC'; // Shirt
+    ctx.fillRect(playerDollX, playerDollY + 20, 40, 30);
     ctx.fillStyle = '#304060'; // Pants
-    ctx.fillRect(playerDollX, playerDollY + s * 2.5, s, s * 1.5); // Legs
-    
+    ctx.fillRect(playerDollX, playerDollY + 50, 40, 30);
+
     // Draw Armor Slots
-    const armorSlotX = playerDollX - s - p;
-    const armorSlotY = playerDollY;
+    const armorSlotX = playerDollX + 50 + p;
     
-    slotCoords['armor-0'] = { x: armorSlotX, y: armorSlotY };
-    drawSlot(helmetSlot, armorSlotX, armorSlotY);
+    slotCoords['armor-0'] = { x: armorSlotX, y: playerDollY };
+    drawSlot(helmetSlot, armorSlotX, playerDollY);
     
-    slotCoords['armor-1'] = { x: armorSlotX, y: armorSlotY + s + p };
-    drawSlot(chestplateSlot, armorSlotX, armorSlotY + s + p);
+    slotCoords['armor-1'] = { x: armorSlotX, y: playerDollY + s + p };
+    drawSlot(chestplateSlot, armorSlotX, playerDollY + s + p);
     
-    slotCoords['armor-2'] = { x: armorSlotX, y: armorSlotY + 2 * (s + p) };
-    drawSlot(leggingsSlot, armorSlotX, armorSlotY + 2 * (s + p));
+    slotCoords['armor-2'] = { x: armorSlotX, y: playerDollY + 2 * (s + p) };
+    drawSlot(leggingsSlot, armorSlotX, playerDollY + 2 * (s + p));
 
     // --- Main Inventory ---
-    const invGridWidth = 9 * (s + p) - p;
-    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
-    const invGridY = (canvas.height / 2) + 20;
+    const invGridX = (canvas.width - invGridWidth) / 2;
+    const invGridY = startY + 130;
     drawMainInventory(invGridX, invGridY);
 }
 
-// --- RENAMED: from drawCraftingUI to drawCraftingTableUI ---
 function drawCraftingTableUI() {
     slotCoords = {};
-    ctx.fillStyle = '#C0C0C0'; // Solid light grey
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
     const s = SLOT_SIZE; const p = SLOT_PADDING;
-    const craftGridX = (canvas.width / 2) - 100;
-    const craftGridY = (canvas.height / 2) - 100;
+    
+    const invGridWidth = 9 * (s + p) + p;
+    const uiWidth = invGridWidth; // Crafting table UI is just inventory width
+    const uiHeight = (4 * (s + p) + p + 10) + 110; // Taller for 3x3 grid
+    
+    const startX = (canvas.width - uiWidth) / 2;
+    const startY = (canvas.height - uiHeight) / 2;
+    
+    // Draw the pop-up background
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#373737';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
+    
+    
+    const craftGridX = startX + 50;
+    const craftGridY = startY + 20;
     
     ctx.fillStyle = '#000000';
     ctx.font = '18px Arial';
-    ctx.fillText('Crafting', craftGridX, craftGridY - 10);
+    ctx.fillText('Crafting', craftGridX, craftGridY - 5);
     
     // 3x3 Grid
     for (let y = 0; y < 3; y++) {
@@ -2142,26 +2166,40 @@ function drawCraftingTableUI() {
     
     ctx.fillStyle = '#000000';
     ctx.font = '30px Arial';
-    ctx.fillText('->', craftGridX + 3 * (s+p), outputY + s/1.5);
+    ctx.fillText('->', craftGridX + 3 * (s+p) + 5, outputY + s/1.5);
     
-    const invGridWidth = 9 * (s + p) - p;
-    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
-    const invGridY = (canvas.height / 2) + 20;
+    const invGridX = (canvas.width - invGridWidth) / 2;
+    const invGridY = startY + 150;
     drawMainInventory(invGridX, invGridY);
 }
 
 function drawFurnaceUI() {
     slotCoords = {};
-    ctx.fillStyle = '#C0C0C0'; // Solid light grey
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
     const s = SLOT_SIZE; const p = SLOT_PADDING;
-    const furnaceX = (canvas.width / 2) - 100;
-    const furnaceY = (canvas.height / 2) - 100;
+
+    const invGridWidth = 9 * (s + p) + p;
+    const uiWidth = invGridWidth;
+    const uiHeight = (4 * (s + p) + p + 10) + 110;
+    
+    const startX = (canvas.width - uiWidth) / 2;
+    const startY = (canvas.height - uiHeight) / 2;
+
+    // Draw the pop-up background
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#373737';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
+    
+    const furnaceX = (canvas.width / 2) - (1.5 * (s + p));
+    const furnaceY = startY + 20;
     
     ctx.fillStyle = '#000000';
     ctx.font = '18px Arial';
-    ctx.fillText('Furnace', furnaceX, furnaceY - 10);
+    ctx.fillText('Furnace', furnaceX, furnaceY - 5);
     
     const inputX = furnaceX; const inputY = furnaceY;
     slotCoords['furnaceIn-0'] = { x: inputX, y: inputY };
@@ -2178,7 +2216,7 @@ function drawFurnaceUI() {
     
     ctx.fillStyle = '#000000';
     ctx.font = '30px Arial';
-    ctx.fillText('->', furnaceX + 2 * (s+p) - 10, outputY + s/1.5);
+    ctx.fillText('->', furnaceX + (s+p) + 10, outputY + s/1.5);
     
     // Progress bar
     ctx.fillStyle = '#444';
@@ -2198,10 +2236,9 @@ function drawFurnaceUI() {
         const progress = furnaceFuelTime / maxFuel;
         ctx.fillRect(fuelX, fuelY - 8, s * progress, 4);
     }
-    
-    const invGridWidth = 9 * (s + p) - p;
-    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
-    const invGridY = (canvas.height / 2) + 20;
+
+    const invGridX = (canvas.width - invGridWidth) / 2;
+    const invGridY = startY + 150;
     drawMainInventory(invGridX, invGridY);
 }
 
