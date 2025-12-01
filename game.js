@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.17 (The Obama Update) ---
+// --- GAME MAKER: v10.18 (Creative Mode, Flying, Item Catalog) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,19 +13,12 @@ const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
     COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
-    // Obama Blocks
     BARK_OBAMA: 19, LEAVE_OBAMA: 20, OBAMA_PLANK: 21, ORE_BAMA: 22,
-
-    // Pickaxes
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
-    // Ingots
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111,
-    // Obama Items
     STICK_OBAMA: 112, OBAMA_INGOT: 113,
-    
-    // Swords
     WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
     DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006,
     OBAMA_BLADE: 1007,
@@ -40,7 +33,6 @@ const TILE_NAMES = {
     [TILES.BARK_OBAMA]: 'BarkObama', [TILES.LEAVE_OBAMA]: 'Leave Obama', [TILES.OBAMA_PLANK]: 'ObamaPlank',
     [TILES.ORE_BAMA]: 'OreBama', [TILES.STICK_OBAMA]: 'StickObama', [TILES.OBAMA_INGOT]: 'ObamaIngot',
     [TILES.OBAMA_BLADE]: 'ObamaBlade',
-
     [TILES.WOOD_PICKAXE]: 'Wood Pickaxe', [TILES.STONE_PICKAXE]: 'Stone Pickaxe',
     [TILES.COPPER_PICKAXE]: 'Copper Pickaxe', [TILES.IRON_PICKAXE]: 'Iron Pickaxe',
     [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe', [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe',
@@ -61,11 +53,9 @@ const TILE_COLORS = {
     [TILES.CRAFTING_TABLE]: '#A07040', [TILES.STICK]: '#8B4513', [TILES.COAL]: '#2E2E2E',
     [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500', [TILES.SLIME_GEL]: '#00BFFF',
     [TILES.USSR_BOOK]: '#CC0000',
-    
     [TILES.BARK_OBAMA]: '#4a2a0a', [TILES.LEAVE_OBAMA]: '#00008b', [TILES.OBAMA_PLANK]: '#9a6a4a',
     [TILES.ORE_BAMA]: '#808080', [TILES.STICK_OBAMA]: '#a07040', [TILES.OBAMA_INGOT]: '#0000CD',
     [TILES.OBAMA_BLADE]: '#FF0000',
-
     [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
     [TILES.IRON_PICKAXE]: '#D2B4D2', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
     [TILES.PLATINUM_PICKAXE]: '#E5E4E2',
@@ -127,6 +117,8 @@ const TILE_SPRITES = {
     [TILES.STICK_OBAMA]: [3, 4],
     [TILES.OBAMA_INGOT]: [4, 4],
 };
+// --- NEW: List of all items for creative menu ---
+const CREATIVE_ITEM_LIST = Object.keys(TILE_SPRITES).map(Number);
 
 const BLOCK_OPACITY = {
     [TILES.AIR]: 1,
@@ -152,7 +144,7 @@ const BLOCK_TIER = {
     [TILES.DIAMOND]: 3, [TILES.COBALT]: 4, [TILES.PLATINUM]: 5,
     [TILES.CRAFTING_TABLE]: 0, [TILES.FURNACE]: 1, [TILES.TORCH]: 0,
     [TILES.BARK_OBAMA]: 0, [TILES.LEAVE_OBAMA]: 0, [TILES.OBAMA_PLANK]: 0,
-    [TILES.ORE_BAMA]: 6 // Needs Platinum Pickaxe
+    [TILES.ORE_BAMA]: 6
 };
 const TOOL_TIER = {
     [TILES.WOOD_PICKAXE]: 1,
@@ -321,18 +313,17 @@ function createTextureAtlas() {
                 atlasCtx.fillRect(sx + 4, sy + 9, 8, 2);
                 break;
             
-            // --- NEW OBAMA SPRITES ---
             case TILES.ORE_BAMA:
-                noise(atlasCtx, sx, sy, 16, 16, 0.2); // stone noise
-                atlasCtx.fillStyle = '#FF0000'; // Red flecks
+                noise(atlasCtx, sx, sy, 16, 16, 0.2);
+                atlasCtx.fillStyle = '#FF0000';
                 for (let i = 0; i < 5; i++) atlasCtx.fillRect(sx + Math.random() * 14, sy + Math.random() * 14, 2, 2);
-                atlasCtx.fillStyle = '#0000FF'; // Blue flecks
+                atlasCtx.fillStyle = '#0000FF';
                 for (let i = 0; i < 5; i++) atlasCtx.fillRect(sx + Math.random() * 14, sy + Math.random() * 14, 2, 2);
                 break;
             case TILES.BARK_OBAMA:
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
                 atlasCtx.fillRect(sx, sy, 16, 16);
-                atlasCtx.fillStyle = '#C0C0C0'; // Inner wood
+                atlasCtx.fillStyle = '#C0C0C0';
                 atlasCtx.fillRect(sx + 2, sy + 2, 12, 12);
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
                 for (let i = 0; i < 16; i += 4) atlasCtx.fillRect(sx + i, sy, 1, 16);
@@ -379,6 +370,9 @@ const worldChunks = new Map();
 const lightChunks = new Map();
 
 // --- 3. Game State ---
+let gameState = 'MENU';
+let isCreativeMode = false;
+
 let player = {
     x: 0, y: 0,
     width: TILE_SIZE * 0.8,
@@ -393,7 +387,9 @@ let player = {
     maxHealth: 100,
     lastDamageTime: 0,
     fallDistance: 0,
-    attackCooldown: 0
+    attackCooldown: 0,
+    isFlying: false, // NEW
+    lastJumpPressTime: 0 // NEW
 };
 let camera = {
     x: 0, y: 0,
@@ -401,7 +397,7 @@ let camera = {
     currentZoom: 1.0,
     zoomSpeed: 0.05
 };
-let keys = { w: false, a: false, d: false, e: false, z: false, x: false };
+let keys = { w: false, a: false, d: false, s: false, e: false, z: false, x: false };
 let mouse = {
     x: 0, y: 0,
     tileX: 0, tileY: 0,
@@ -445,6 +441,13 @@ let furnaceOutput = null;
 let furnaceCookTime = 0;
 let furnaceFuelTime = 0;
 const COOK_TIME = 200;
+
+let playButton = {
+    x: 0, y: 0, width: 200, height: 50, text: 'Play'
+};
+let creativeButton = {
+    x: 0, y: 0, width: 200, height: 50, text: 'Mode: Survival'
+};
 
 // --- Light Engine ---
 const MAX_LIGHT = 15;
@@ -490,7 +493,6 @@ const CRAFTING_RECIPES = {
         input: [{id: TILES.WOOD_LOG, count: 1}, {id: TILES.COAL, count: 1}],
         output: {id: TILES.TORCH, count: 4}
     },
-    // --- NEW OBAMA RECIPES ---
     OBAMA_PLANK: {
         type: 'shapeless', input: [{ id: TILES.BARK_OBAMA, count: 1 }],
         output: { id: TILES.OBAMA_PLANK, count: 4 }
@@ -534,11 +536,10 @@ function addSwordRecipes() {
         { id: TILES.DIAMOND_INGOT, sword: TILES.DIAMOND_SWORD },
         { id: TILES.COBALT_INGOT, sword: TILES.COBALT_SWORD },
         { id: TILES.PLATINUM_INGOT, sword: TILES.PLATINUM_SWORD },
-        // --- NEW OBAMA SWORD ---
         { id: TILES.OBAMA_INGOT, sword: TILES.OBAMA_BLADE, stick: TILES.STICK_OBAMA }
     ];
     for (const mat of materials) {
-        const stickType = mat.stick ?? TILES.STICK; // Use StickObama if specified, else normal stick
+        const stickType = mat.stick ?? TILES.STICK;
         CRAFTING_RECIPES[TILE_NAMES[mat.sword]] = {
             type: 'shaped',
             pattern: [
@@ -556,11 +557,11 @@ const SMELT_RECIPES = {
     [TILES.COPPER_ORE]: TILES.COPPER_INGOT, [TILES.IRON_ORE]: TILES.IRON_INGOT,
     [TILES.DIAMOND]: TILES.DIAMOND_INGOT, [TILES.COBALT]: TILES.COBALT_INGOT,
     [TILES.PLATINUM]: TILES.PLATINUM_INGOT, [TILES.WOOD_LOG]: TILES.COAL,
-    [TILES.ORE_BAMA]: TILES.OBAMA_INGOT // NEW
+    [TILES.ORE_BAMA]: TILES.OBAMA_INGOT
 };
 const FUEL_TIMES = {
     [TILES.WOOD_LOG]: 150, [TILES.WOOD_PLANK]: 75, [TILES.COAL]: 800,
-    [TILES.BARK_OBAMA]: 150, [TILES.OBAMA_PLANK]: 75 // New fuels
+    [TILES.BARK_OBAMA]: 150, [TILES.OBAMA_PLANK]: 75
 };
 
 // --- 5. Chunk Management ---
@@ -594,7 +595,7 @@ function generateChunk(chunkX, chunkY) {
                 else if (oreNoise > 0.8) chunk[y][x] = TILES.DIAMOND;
                 else if (oreNoise > 0.85) chunk[y][x] = TILES.COBALT;
                 else if (oreNoise > 0.9) chunk[y][x] = TILES.PLATINUM;
-                else if (oreNoise > 0.95) chunk[y][x] = TILES.ORE_BAMA; // NEW ORE
+                else if (oreNoise > 0.95) chunk[y][x] = TILES.ORE_BAMA;
             }
             if (chunk[y][x] === TILES.DIRT || chunk[y][x] === TILES.STONE) {
                 let caveNoise = simplex.noise2D(globalX / CAVE_NOISE_SCALE, globalY / CAVE_NOISE_SCALE);
@@ -701,7 +702,6 @@ function findSurfaceY(globalX) {
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 function generateTreeInChunk(chunk, x, y) {
-    // --- NEW: Tree Type Logic ---
     let logType = TILES.WOOD_LOG;
     let leafType = TILES.LEAVES;
     if (Math.random() < 0.05) { // 5% chance of Obama Tree
@@ -715,7 +715,7 @@ function generateTreeInChunk(chunk, x, y) {
         const currentY = y - i;
         if (currentY < 0) break;
         if (chunk[currentY][x] === TILES.AIR) {
-            chunk[currentY][x] = logType; // Use logType
+            chunk[currentY][x] = logType;
         }
     }
     const leafBaseY = y - trunkHeight;
@@ -723,7 +723,7 @@ function generateTreeInChunk(chunk, x, y) {
         const newX = x + lx;
         const newY = ly;
         if (newX >= 0 && newX < CHUNK_SIZE && newY >= 0 && newY < CHUNK_SIZE && chunk[newY][newX] === TILES.AIR) {
-            chunk[newY][newX] = leafType; // Use leafType
+            chunk[newY][newX] = leafType;
         }
     };
     
@@ -809,6 +809,23 @@ function removeBlockFromInventory(slotArray, slotIndex) {
 }
 
 // --- 7. Input Handlers ---
+function handleMenuClick(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (x > playButton.x && x < playButton.x + playButton.width &&
+        y > playButton.y && y < playButton.y + playButton.height) {
+        init();
+    }
+    
+    if (x > creativeButton.x && x < creativeButton.x + creativeButton.width &&
+        y > creativeButton.y && y < creativeButton.y + creativeButton.height) {
+        isCreativeMode = !isCreativeMode;
+        creativeButton.text = isCreativeMode ? 'Mode: Creative' : 'Mode: Survival';
+    }
+}
+
 function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
         if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
@@ -823,9 +840,21 @@ function setupInputListeners() {
             }
             return;
         }
-        if (e.key === 'w' || e.key === 'W' || e.key === ' ') keys.w = true;
+        if (e.key === 'w' || e.key === 'W') keys.w = true;
+        if (e.key === ' ') {
+            keys.w = true; // Use 'w' for jump/fly up logic
+            if (isCreativeMode) {
+                const now = Date.now();
+                if (now - player.lastJumpPressTime < 300) { // 300ms double-tap
+                    player.isFlying = !player.isFlying;
+                    player.vy = 0; // Stop fall/rise
+                }
+                player.lastJumpPressTime = now;
+            }
+        }
         if (e.key === 'a' || e.key === 'A') keys.a = true;
         if (e.key === 'd' || e.key === 'D') keys.d = true;
+        if (e.key === 's' || e.key === 'S') keys.s = true; // For flying down
         if (e.key === 'e' || e.key === 'E') {
             if (!keys.e) {
                 isInventoryOpen = true;
@@ -846,6 +875,7 @@ function setupInputListeners() {
         if (e.key === 'w' || e.key === 'W' || e.key === ' ') keys.w = false;
         if (e.key === 'a' || e.key === 'A') keys.a = false;
         if (e.key === 'd' || e.key === 'D') keys.d = false;
+        if (e.key === 's' || e.key === 'S') keys.s = false;
         if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') keys.e = false;
         if (e.key === 'z' || e.key === 'Z') keys.z = false;
         if (e.key === 'x' || e.key === 'X') keys.x = false;
@@ -857,6 +887,8 @@ function setupInputListeners() {
     });
 
     canvas.addEventListener('mousemove', (e) => {
+        if (gameState === 'MENU') return;
+        
         const rect = canvas.getBoundingClientRect();
         mouse.x = e.clientX - rect.left;
         mouse.y = e.clientY - rect.top;
@@ -882,10 +914,18 @@ function setupInputListeners() {
     
     canvas.addEventListener('mousedown', (e) => {
         e.preventDefault();
+        
+        if (gameState === 'MENU') {
+            handleMenuClick(e);
+            return;
+        }
+        
         mouse.isDown = true;
         const isShiftClick = e.shiftKey;
         
-        if (isInventoryOpen) {
+        if (isInventoryOpen && isCreativeMode) {
+            handleInventoryClick(e.button, 'creative', isShiftClick);
+        } else if (isInventoryOpen && !isCreativeMode) {
             handleInventoryClick(e.button, 'inventory', isShiftClick);
         } else if (isCraftingTableOpen) {
             handleInventoryClick(e.button, 'craftingTable', isShiftClick);
@@ -932,18 +972,16 @@ function tryAttack(x, y) {
     if (enemy) {
         const heldSlot = hotbarSlots[selectedSlot];
         const heldId = heldSlot ? heldSlot.id : null;
-        const damage = WEAPON_DAMAGE[heldId] ?? 2; // Default 2 damage (hand)
+        const damage = WEAPON_DAMAGE[heldId] ?? 2;
         
         damageEnemy(enemy, damage);
-        player.attackCooldown = 30; // 0.5 sec cooldown
+        player.attackCooldown = 30;
         return true;
     }
     return false;
 }
 
 function startMining(x, y) {
-    // --- BUG FIX: Removed redundant enemy check ---
-    
     const tileType = getTile(x, y);
     if (tileType === TILES.AIR) {
         stopMining();
@@ -962,7 +1000,6 @@ function startMining(x, y) {
     const heldSlot = hotbarSlots[selectedSlot];
     const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
 
-    // Check if item is a sword
     const isSword = heldSlot && heldSlot.id >= 1000;
     
     if (toolTier < requiredTier || isSword) {
@@ -979,7 +1016,11 @@ function startMining(x, y) {
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = Math.max(5, (hardness * 10) / toolPower); 
+    miningState.requiredTime = Math.max(5, (hardness * 10) / toolPower);
+    
+    if (isCreativeMode) {
+        miningState.progress = miningState.requiredTime;
+    }
 }
 
 function stopMining() {
@@ -1019,8 +1060,6 @@ function placeBlock() {
     const slot = hotbarSlots[selectedSlot];
     if (!slot) return;
     
-    // --- BUG FIX ---
-    // Can't place tools, swords, or special items
     if (slot.id >= 100) return; 
 
     const playerTileX = toTileCoord(player.x + player.width / 2);
@@ -1042,18 +1081,23 @@ function placeBlock() {
         return;
     }
     
-    if (removeBlockFromInventory(hotbarSlots, selectedSlot)) {
-        setTile(mouse.tileX, mouse.tileY, slot.id);
-        
-        if (slot.id === TILES.TORCH) {
-            setLight(mouse.tileX, mouse.tileY, 14);
-        } else if (isBlockSolid(slot.id)) {
-            setLight(mouse.tileX, mouse.tileY, 0);
-            // --- LAG FIX: Removed updateSunlightColumn() ---
-            const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
-            if (lightAbove === AMBIENT_LIGHT_LEVEL) {
-                 lightQueue.push([mouse.tileX, mouse.tileY - 1]);
-            }
+    // --- CREATIVE MODE: Don't remove block ---
+    if (!isCreativeMode) {
+        if (!removeBlockFromInventory(hotbarSlots, selectedSlot)) {
+            return; // Not in creative and no blocks to place
+        }
+    }
+    
+    // Place the block
+    setTile(mouse.tileX, mouse.tileY, slot.id);
+    
+    if (slot.id === TILES.TORCH) {
+        setLight(mouse.tileX, mouse.tileY, 14);
+    } else if (isBlockSolid(slot.id)) {
+        setLight(mouse.tileX, mouse.tileY, 0);
+        const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
+        if (lightAbove === AMBIENT_LIGHT_LEVEL) {
+             lightQueue.push([mouse.tileX, mouse.tileY - 1]);
         }
     }
 }
@@ -1072,10 +1116,26 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             const index = parseInt(indexStr);
             let slotArray, setter;
             
+            // --- CREATIVE MODE CLICKS ---
+            if (uiType === 'creative') {
+                if (arrayName === 'catalog') {
+                    const sourceItem = slotCoords[key].item;
+                    let stackSize = sourceItem.id < 100 || (sourceItem.id >= 107 && sourceItem.id <= 113) ? MAX_STACK : 1;
+                    if (button === 2) stackSize = 1; // Right-click gives one
+                    
+                    mouse.heldItem = { ...sourceItem, count: stackSize };
+                    return; // Don't check crafting
+                }
+                if (arrayName === 'trash') {
+                    mouse.heldItem = null;
+                    return;
+                }
+            }
+
             if (arrayName === 'inv') { slotArray = inventorySlots; setter = (item) => inventorySlots[index] = item; }
             else if (arrayName === 'hotbar') { slotArray = hotbarSlots; setter = (item) => hotbarSlots[index] = item; }
             
-            else if (uiType === 'inventory') {
+            else if (uiType === 'inventory' || uiType === 'creative') {
                 if (arrayName === 'pCraft') { slotArray = playerCraftingGrid; setter = (item) => playerCraftingGrid[index] = item; }
                 else if (arrayName === 'pCraftOut') { handleOutputClick(playerCraftingOutput, 'playerCrafting', (item) => playerCraftingOutput = item, isShiftClicking); return; }
                 else if (arrayName === 'armor') {
@@ -1093,9 +1153,23 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
                 else if (arrayName === 'furnaceFuel') { slotArray = [furnaceFuel]; setter = (item) => furnaceFuel = item; }
                 else if (arrayName === 'furnaceOut') { handleOutputClick(furnaceOutput, 'furnace', (item) => furnaceOutput = item, isShiftClicking); return; }
             }
+            
+            // --- CREATIVE MODE CLICKING ---
+            if (isCreativeMode && uiType === 'creative' && slotArray) {
+                if (button === 0) { // Left-click in inventory
+                    if(mouse.heldItem) {
+                        setter({ ...mouse.heldItem }); // Place a copy
+                    } else {
+                        setter(null); // Delete
+                    }
+                } else if (button === 2) { // Right-click
+                    setter(null); // Delete
+                }
+                return; // Don't run normal logic
+            }
 
             if (isShiftClicking && slotArray) {
-                quickMoveItem(slotArray, index, arrayName, setter);
+                quickMoveItem(slotArray, index, fromArea, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -1405,12 +1479,21 @@ function update() {
         if (keys.a) player.vx = -MOVE_SPEED;
         else if (keys.d) player.vx = MOVE_SPEED;
         else player.vx = 0;
-        if (keys.w && player.isOnGround) {
-            player.vy = JUMP_STRENGTH;
-            player.isOnGround = false;
+
+        // --- MODIFIED: Flying Logic ---
+        if (player.isFlying) {
+            player.fallDistance = 0;
+            if (keys.w) player.vy = -MOVE_SPEED;
+            else if (keys.s) player.vy = MOVE_SPEED;
+            else player.vy = 0;
+        } else {
+            if (keys.w && player.isOnGround) {
+                player.vy = JUMP_STRENGTH;
+                player.isOnGround = false;
+            }
+            player.vy += GRAVITY;
         }
 
-        player.vy += GRAVITY;
         let oldY = player.y;
         let newY = player.y + player.vy;
         
@@ -1422,7 +1505,7 @@ function update() {
             if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
                 player.vy = 0;
                 player.y = (tileY * TILE_SIZE) - player.height;
-                if (!player.isOnGround) {
+                if (!player.isOnGround && !player.isFlying) {
                     updatePlayerFallDamage(player.y - oldY); // Landed
                 }
                 player.isOnGround = true;
@@ -1443,7 +1526,7 @@ function update() {
             }
         }
         
-        if (!player.isOnGround) {
+        if (!player.isOnGround && !player.isFlying) {
             player.fallDistance += (player.y - oldY);
         }
 
@@ -1473,7 +1556,7 @@ function update() {
     }
 
     // --- Player Animation ---
-    if (!player.isOnGround) {
+    if (!player.isOnGround && !player.isFlying) {
         player.state = 'jumping';
     } else if (keys.a || keys.d) {
         player.state = 'walking';
@@ -1527,6 +1610,8 @@ function update() {
                 else if (arrayName === 'furnaceIn') hoveredItem = furnaceInput;
                 else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
                 else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
+                else if (arrayName === 'catalog') hoveredItem = slotCoords[key].item;
+                else if (arrayName === 'trash') hoveredItem = { id: -1, count: 0 }; // Placeholder
                 break;
             }
         }
@@ -1551,7 +1636,8 @@ function update() {
 
 // --- Player Health & Damage ---
 function takeDamage(amount) {
-    if (player.lastDamageTime > 0) return; // Invincible
+    if (isCreativeMode) return;
+    if (player.lastDamageTime > 0) return;
     
     player.health -= amount;
     player.lastDamageTime = INVINCIBILITY_TIME;
@@ -1560,7 +1646,6 @@ function takeDamage(amount) {
     if (player.health <= 0) {
         player.health = 0;
         console.log("Player died!");
-        // Respawn
         player.x = spawnPos.x;
         player.y = spawnPos.y;
         player.health = player.maxHealth;
@@ -1571,11 +1656,12 @@ function takeDamage(amount) {
 }
 
 function updatePlayerFallDamage(pixelsFallen) {
+    if (isCreativeMode) return;
     if (pixelsFallen <= 0) return;
     
     const blocksFallen = pixelsFallen / TILE_SIZE;
-    if (blocksFallen > 4) { // Safe to fall 4 blocks
-        const damage = Math.floor((blocksFallen - 4) * 5); // 5 damage per block
+    if (blocksFallen > 4) {
+        const damage = Math.floor((blocksFallen - 4) * 5);
         if (damage > 0) {
             takeDamage(damage);
         }
@@ -1623,7 +1709,7 @@ function damageEnemy(enemy, amount) {
         const dropAmount = Math.floor(Math.random() * 3) + 1;
         addItemToInventory({ id: TILES.SLIME_GEL, count: dropAmount });
         
-        if (Math.random() < 0.00005) { // 0.005%
+        if (Math.random() < 0.00005) {
             console.log("!!! RARE DROP !!!");
             addItemToInventory({ id: TILES.USSR_BOOK, count: 1 });
         }
@@ -1716,7 +1802,6 @@ function updateMining() {
                 if (tileType === TILES.TORCH) {
                     setLight(miningState.tileX, miningState.tileY, 0);
                 } else if (isBlockSolid(tileType)) {
-                    // --- LAG FIX: Removed updateSunlightColumn() ---
                     const lightAbove = getLight(miningState.tileX, miningState.tileY - 1);
                     if (lightAbove === AMBIENT_LIGHT_LEVEL) {
                         setLight(miningState.tileX, miningState.tileY, AMBIENT_LIGHT_LEVEL);
@@ -1781,7 +1866,7 @@ function isTileSolid(tileX, tileY) {
         tileType === TILES.WOOD_LOG || 
         tileType === TILES.LEAVES ||
         tileType === TILES.TORCH ||
-        tileType === TILES.BARK_OBAMA || // Obama tree not solid
+        tileType === TILES.BARK_OBAMA ||
         tileType === TILES.LEAVE_OBAMA) {
         return false;
     }
@@ -1908,7 +1993,9 @@ function draw() {
         drawHotbar();
     }
     
-    drawHealthBar();
+    if (!isCreativeMode) {
+        drawHealthBar();
+    }
     
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '16px Arial';
@@ -1918,7 +2005,9 @@ function draw() {
     ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
     ctx.textAlign = "left";
     
-    if (isInventoryOpen) {
+    if (isInventoryOpen && isCreativeMode) {
+        drawCreativeInventoryScreen();
+    } else if (isInventoryOpen && !isCreativeMode) {
         drawPlayerInventoryScreen();
     } else if (isCraftingTableOpen) {
         drawCraftingTableUI();
@@ -1928,15 +2017,17 @@ function draw() {
     
     if (mouse.heldItem) {
         drawSprite(mouse.heldItem, mouse.x - (SLOT_SIZE/2), mouse.y - (SLOT_SIZE/2), SLOT_SIZE);
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(mouse.heldItem.count, mouse.x + SLOT_SIZE/2 - 4, mouse.y + SLOT_SIZE/2 - 4);
-        ctx.textAlign = 'left';
+        if (mouse.heldItem.count > 1) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(mouse.heldItem.count, mouse.x + SLOT_SIZE/2 - 4, mouse.y + SLOT_SIZE/2 - 4);
+            ctx.textAlign = 'left';
+        }
     }
     
     if (hoveredItem && !mouse.heldItem) {
-        const itemName = TILE_NAMES[hoveredItem.id];
+        const itemName = hoveredItem.id === -1 ? "Trash" : TILE_NAMES[hoveredItem.id];
         ctx.font = '14px Arial';
         const textWidth = ctx.measureText(itemName).width;
         
@@ -1947,6 +2038,39 @@ function draw() {
         ctx.textAlign = 'left';
         ctx.fillText(itemName, mouse.x + 19, mouse.y + 29);
     }
+}
+
+function drawMainMenu() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '50px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('My 2D Game', canvas.width / 2, canvas.height / 2 - 100);
+    
+    playButton.x = canvas.width / 2 - playButton.width / 2;
+    playButton.y = canvas.height / 2;
+    creativeButton.x = canvas.width / 2 - creativeButton.width / 2;
+    creativeButton.y = canvas.height / 2 + 60;
+
+    ctx.fillStyle = '#34A853';
+    ctx.fillRect(playButton.x, playButton.y, playButton.width, playButton.height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(playButton.text, playButton.x + playButton.width / 2, playButton.y + playButton.height / 2);
+    
+    ctx.fillStyle = '#808080';
+    ctx.fillRect(creativeButton.x, creativeButton.y, creativeButton.width, creativeButton.height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(creativeButton.text, creativeButton.x + creativeButton.width / 2, creativeButton.y + creativeButton.height / 2);
+    
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
 }
 
 function drawPlayer() {
@@ -2021,6 +2145,8 @@ function drawEnemies() {
 }
 
 function drawHealthBar() {
+    if (isCreativeMode) return;
+    
     const numHearts = player.maxHealth / 10;
     const healthPerHeart = player.maxHealth / numHearts;
     const currentHeart = player.health / healthPerHeart;
@@ -2030,7 +2156,7 @@ function drawHealthBar() {
     const startY = 40;
 
     ctx.font = '16px Arial';
-    ctx.fillStyle = '#FF0000'; // Red for hearts
+    ctx.fillStyle = '#FF0000';
 
     for (let i = 0; i < numHearts; i++) {
         let x = startX + i * (heartSize + 4);
@@ -2064,11 +2190,13 @@ function drawSlotContents(slot, x, y) {
     if (slot) {
         drawSprite(slot, x + 4, y + 4, s - 8);
         
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'right';
-        ctx.fillText(slot.count, x + s - 4, y + s - 4);
-        ctx.textAlign = 'left';
+        if (slot.count > 1) {
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(slot.count, x + s - 4, y + s - 4);
+            ctx.textAlign = 'left';
+        }
     }
 }
 
@@ -2104,7 +2232,7 @@ function drawHotbar() {
 
 function drawSlot(slot, x, y) {
     const s = SLOT_SIZE;
-    ctx.fillStyle = '#707070'; // Solid dark grey
+    ctx.fillStyle = '#707070';
     ctx.fillRect(x, y, s, s);
     drawSlotContents(slot, x, y);
 }
@@ -2150,8 +2278,6 @@ function drawPlayerInventoryScreen() {
     ctx.lineWidth = 2;
     ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
 
-
-    // --- 2x2 Crafting Grid ---
     const craftGridX = startX + uiWidth - (2 * (s+p) + 40 + (s+p)) - 20;
     const craftGridY = startY + 20;
     
@@ -2178,11 +2304,9 @@ function drawPlayerInventoryScreen() {
     ctx.font = '24px Arial';
     ctx.fillText('->', craftGridX + 2 * (s+p) - 5, outputY + s/1.5);
 
-    // --- Player Doll & Armor ---
     const playerDollX = startX + 30;
     const playerDollY = startY + 20;
     
-    // --- NEW: Steve Doll ---
     ctx.fillStyle = '#623B20'; // Hair
     ctx.fillRect(playerDollX, playerDollY, 40, 10);
     ctx.fillStyle = '#E0A07E'; // Skin
@@ -2203,10 +2327,63 @@ function drawPlayerInventoryScreen() {
     slotCoords['armor-2'] = { x: armorSlotX, y: playerDollY + 2 * (s + p) };
     drawSlot(leggingsSlot, armorSlotX, playerDollY + 2 * (s + p));
 
-    // --- Main Inventory ---
     const invGridX = (canvas.width - invGridWidth) / 2;
     const invGridY = startY + 130;
     drawMainInventory(invGridX, invGridY);
+}
+
+// --- NEW: Creative Inventory Screen ---
+function drawCreativeInventoryScreen() {
+    slotCoords = {};
+    const s = SLOT_SIZE; const p = SLOT_PADDING;
+    
+    const uiWidth = 500;
+    const uiHeight = 500;
+    
+    const startX = (canvas.width - uiWidth) / 2;
+    const startY = (canvas.height - uiHeight) / 2;
+    
+    ctx.fillStyle = '#C0C0C0';
+    ctx.fillRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#373737';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(startX, startY, uiWidth, uiHeight);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
+
+    // --- Item Catalog ---
+    const catalogX = startX + 20;
+    const catalogY = startY + 20;
+    const itemsPerRow = 12;
+    
+    for (let i = 0; i < CREATIVE_ITEM_LIST.length; i++) {
+        const id = CREATIVE_ITEM_LIST[i];
+        const item = { id: id, count: 1 };
+        
+        const col = i % itemsPerRow;
+        const row = Math.floor(i / itemsPerRow);
+        
+        const sx = catalogX + col * (s + p);
+        const sy = catalogY + row * (s + p);
+        
+        slotCoords[`catalog-${i}`] = { x: sx, y: sy, item: item };
+        drawSlot(null, sx, sy); // Draw empty slot
+        drawSlotContents(item, sx, sy); // Draw item
+    }
+    
+    // --- Trash Slot ---
+    const trashX = startX + uiWidth - s - 20;
+    const trashY = startY + uiHeight - s - 20;
+    slotCoords['trash-0'] = { x: trashX, y: trashY };
+    drawSlot(null, trashX, trashY);
+    ctx.fillStyle = '#FF0000';
+    ctx.font = '30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', trashX + s / 2, trashY + s / 2 + 2);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
 }
 
 function drawCraftingTableUI() {
@@ -2237,7 +2414,6 @@ function drawCraftingTableUI() {
     ctx.font = '18px Arial';
     ctx.fillText('Crafting', craftGridX, craftGridY - 5);
     
-    // 3x3 Grid
     for (let y = 0; y < 3; y++) {
         for (let x = 0; x < 3; x++) {
             const i = y * 3 + x;
@@ -2330,15 +2506,21 @@ function drawFurnaceUI() {
 
 
 // --- 12. Main Game Loop ---
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
+function masterLoop() {
+    if (gameState === 'MENU') {
+        drawMainMenu();
+    } else if (gameState === 'PLAYING') {
+        update();
+        draw();
+    }
+    requestAnimationFrame(masterLoop);
 }
 
 // --- 13. Start the Game ---
 function init() {
     console.log("Initializing game...");
+    gameState = 'PLAYING';
+    
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
     
@@ -2377,13 +2559,12 @@ function init() {
     processLightQueue();
     console.log("Light propagated.");
     
-    setupInputListeners();
-    resizeCanvas();
-    
     spawnEnemy(player.x + TILE_SIZE * 5, player.y);
     
-    gameLoop();
-    console.log("Game started!");
+    console.log(`Game started in ${isCreativeMode ? 'Creative' : 'Survival'} mode!`);
 }
 
-init();
+// --- Start the game logic ---
+setupInputListeners();
+resizeCanvas();
+masterLoop(); // Start in the menu
