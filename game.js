@@ -1,11 +1,13 @@
-// --- GAME MAKER: v10.8 (Tree Collision & Crafting Fix) ---
+// --- GAME MAKER: v10.11 (Procedural Texture Atlas) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false; // Keep pixel art crisp
 
 // --- 2. World Configuration ---
 const TILE_SIZE = 20;
 const CHUNK_SIZE = 16;
+const SPRITE_SIZE = 16; // Size of one sprite on the atlas
 
 const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
@@ -29,6 +31,7 @@ const TILE_NAMES = {
     [TILES.IRON_INGOT]: 'Iron Ingot', [TILES.DIAMOND_INGOT]: 'Diamond',
     [TILES.COBALT_INGOT]: 'Cobalt Ingot', [TILES.PLATINUM_INGOT]: 'Platinum Ingot'
 };
+// This is the color map for the generator
 const TILE_COLORS = {
     [TILES.AIR]: '#87CEEB', [TILES.GRASS]: '#34A853', [TILES.DIRT]: '#8B4513',
     [TILES.STONE]: '#808080', [TILES.IRON]: '#D2B48C', [TILES.COPPER]: '#B87333',
@@ -37,9 +40,43 @@ const TILE_COLORS = {
     [TILES.CRAFTING_TABLE]: '#A07040', [TILES.STICK]: '#8B4513', [TILES.COAL]: '#2E2E2E',
     [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500',
     [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
-    [TILES.IRON_PICKAXE]: '#D2B48C', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
+    [TILES.IRON_PICKAXE]: '#D2B4D2', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
     [TILES.PLATINUM_PICKAXE]: '#E5E4E2', [TILES.COPPER_INGOT]: '#B87333', [TILES.IRON_INGOT]: '#D2B4D2',
     [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB', [TILES.PLATINUM_INGOT]: '#E5E4E2'
+};
+
+// Sprite map (using your desired order)
+const TILE_SPRITES = {
+    [TILES.STONE]: [0, 0],
+    [TILES.WOOD_PLANK]: [1, 0],
+    [TILES.CRAFTING_TABLE]: [2, 0],
+    [TILES.FURNACE]: [3, 0],
+    [TILES.COAL]: [4, 0],
+    [TILES.TORCH]: [5, 0],
+    [TILES.DIRT]: [6, 0],
+    [TILES.IRON]: [7, 0],
+    [TILES.COPPER]: [8, 0],
+    [TILES.DIAMOND]: [9, 0],
+    [TILES.COBALT]: [10, 0],
+    [TILES.PLATINUM]: [11, 0],
+    [TILES.WOOD_LOG]: [12, 0],
+    [TILES.LEAVES]: [13, 0],
+    [TILES.GRASS]: [14, 0],
+    
+    [TILES.STICK]: [0, 1],
+    [TILES.WOOD_PICKAXE]: [1, 1],
+    [TILES.STONE_PICKAXE]: [2, 1],
+    [TILES.COPPER_PICKAXE]: [3, 1],
+    [TILES.IRON_PICKAXE]: [4, 1],
+    [TILES.DIAMOND_PICKAXE]: [5, 1],
+    [TILES.COBALT_PICKAXE]: [6, 1],
+    [TILES.PLATINUM_PICKAXE]: [7, 1],
+    
+    [TILES.COPPER_INGOT]: [0, 2],
+    [TILES.IRON_INGOT]: [1, 2],
+    [TILES.DIAMOND_INGOT]: [2, 2],
+    [TILES.COBALT_INGOT]: [3, 2],
+    [TILES.PLATINUM_INGOT]: [4, 2],
 };
 
 const BLOCK_OPACITY = {
@@ -55,8 +92,6 @@ function getBlockOpacity(tileId) {
     return BLOCK_OPACITY[tileId] ?? 16;
 }
 function isBlockSolid(tileId) {
-    // This function is for LIGHTING.
-    // isTileSolid() is for PHYSICS.
     return getBlockOpacity(tileId) >= 16;
 }
 
@@ -96,6 +131,120 @@ const TOOL_POWER = {
     [TILES.COBALT_PICKAXE]: 8,
     [TILES.PLATINUM_PICKAXE]: 10,
 };
+
+// --- NEW: Procedural Texture Atlas Generator ---
+function createTextureAtlas() {
+    console.log("Generating procedural texture atlas...");
+    const atlasCanvas = document.createElement('canvas');
+    atlasCanvas.width = 256;
+    atlasCanvas.height = 256;
+    const atlasCtx = atlasCanvas.getContext('2d');
+
+    // Helper for random noise
+    const noise = (ctx, x, y, w, h, alpha) => {
+        for (let i = 0; i < 50; i++) {
+            ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, ${alpha})`;
+            ctx.fillRect(x + Math.random() * w, y + Math.random() * h, 1, 1);
+        }
+    };
+
+    // Loop over every sprite and draw it
+    for (const tileId in TILE_SPRITES) {
+        const [x, y] = TILE_SPRITES[tileId];
+        const sx = x * SPRITE_SIZE;
+        const sy = y * SPRITE_SIZE;
+        const color = TILE_COLORS[tileId];
+        
+        atlasCtx.fillStyle = color;
+        atlasCtx.fillRect(sx, sy, SPRITE_SIZE, SPRITE_SIZE);
+
+        // Add procedural details
+        switch (Number(tileId)) {
+            case TILES.GRASS:
+                atlasCtx.fillStyle = '#8B4513'; // Dirt color
+                atlasCtx.fillRect(sx, sy + 12, SPRITE_SIZE, 4);
+                noise(atlasCtx, sx, sy, 16, 12, 0.1);
+                break;
+            case TILES.DIRT:
+            case TILES.STONE:
+            case TILES.IRON:
+            case TILES.COPPER:
+            case TILES.DIAMOND:
+            case TILES.COBALT:
+            case TILES.PLATINUM:
+            case TILES.COAL:
+                noise(atlasCtx, sx, sy, 16, 16, 0.2);
+                break;
+            case TILES.WOOD_LOG:
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
+                atlasCtx.fillRect(sx, sy, 16, 16); // Darken
+                atlasCtx.fillStyle = '#A07040'; // Inner wood
+                atlasCtx.fillRect(sx + 2, sy + 2, 12, 12);
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
+                for (let i = 0; i < 16; i += 4) atlasCtx.fillRect(sx + i, sy, 1, 16);
+                break;
+            case TILES.LEAVES:
+                noise(atlasCtx, sx, sy, 16, 16, 0.3);
+                break;
+            case TILES.CRAFTING_TABLE:
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
+                atlasCtx.fillRect(sx, sy, 16, 4); // Top edge
+                atlasCtx.fillRect(sx, sy, 4, 16); // Left edge
+                atlasCtx.fillRect(sx + 12, sy, 4, 16); // Right edge
+                atlasCtx.fillRect(sx + 4, sy + 8, 8, 4); // Hammer
+                break;
+            case TILES.FURNACE:
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.4)';
+                atlasCtx.fillRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = '#FFA500';
+                atlasCtx.fillRect(sx + 4, sy + 6, 8, 6); // Firebox
+                break;
+            case TILES.TORCH:
+                atlasCtx.clearRect(sx, sy, 16, 16); // Make transparent
+                atlasCtx.fillStyle = '#8B4513'; // Stick
+                atlasCtx.fillRect(sx + 6, sy + 8, 4, 8);
+                atlasCtx.fillStyle = '#FFA500'; // Flame
+                atlasCtx.fillRect(sx + 5, sy, 6, 6);
+                break;
+            case TILES.STICK:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK];
+                atlasCtx.fillRect(sx + 6, sy + 2, 4, 12);
+                break;
+            case TILES.WOOD_PICKAXE:
+            case TILES.STONE_PICKAXE:
+            case TILES.COPPER_PICKAXE:
+            case TILES.IRON_PICKAXE:
+            case TILES.DIAMOND_PICKAXE:
+            case TILES.COBALT_PICKAXE:
+            case TILES.PLATINUM_PICKAXE:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK]; // Handle
+                atlasCtx.fillRect(sx + 6, sy + 2, 4, 12);
+                atlasCtx.fillStyle = color; // Head
+                atlasCtx.fillRect(sx + 2, sy + 2, 12, 4);
+                break;
+            case TILES.COPPER_INGOT:
+            case TILES.IRON_INGOT:
+            case TILES.DIAMOND_INGOT:
+            case TILES.COBALT_INGOT:
+            case TILES.PLATINUM_INGOT:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = color;
+                atlasCtx.fillRect(sx + 3, sy + 4, 10, 8);
+                atlasCtx.fillStyle = 'rgba(255,255,255,0.3)';
+                atlasCtx.fillRect(sx + 3, sy + 4, 10, 2);
+                break;
+        }
+    }
+    
+    console.log("Atlas generation complete.");
+    return atlasCanvas;
+}
+// --- END of Texture Generator ---
+
+// --- Create the atlas on script load ---
+const textureAtlas = createTextureAtlas();
 
 const worldChunks = new Map();
 const lightChunks = new Map();
@@ -155,6 +304,9 @@ const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
 const MIN_GLOBAL_LIGHT = 1;
 let lightQueue = [];
 let removeQueue = [];
+
+// --- Tooltip ---
+let hoveredItem = null;
 
 const simplex = new SimplexNoise();
 
@@ -833,9 +985,6 @@ function consumeCraftingMaterials(uiType, setter) {
     }
 }
 
-/**
- * --- REPLACED: This is the new, flexible crafting logic ---
- */
 function checkCrafting() {
     craftingOutput = null;
     const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
@@ -872,24 +1021,20 @@ function checkCrafting() {
             const pHeight = pattern.length;
             const pWidth = pattern[0].length;
             
-            // Iterate through all possible top-left starting positions
             for (let startY = 0; startY <= 3 - pHeight; startY++) {
                 for (let startX = 0; startX <= 3 - pWidth; startX++) {
                     
                     let match = true;
-                    // Check the whole 3x3 grid
                     for (let gridY = 0; gridY < 3; gridY++) {
                         for (let gridX = 0; gridX < 3; gridX++) {
                             const gridIndex = gridY * 3 + gridX;
                             const gridId = gridIds[gridIndex];
                             
-                            // Find corresponding pattern coordinates
                             const patternX = gridX - startX;
                             const patternY = gridY - startY;
                             
                             let patternId = null;
                             if (patternX >= 0 && patternX < pWidth && patternY >= 0 && patternY < pHeight) {
-                                // This grid cell is *inside* the pattern
                                 patternId = pattern[patternY][patternX];
                             }
                             
@@ -903,7 +1048,7 @@ function checkCrafting() {
                     
                     if (match) {
                         craftingOutput = { ...recipe.output };
-                        return; // Found a match!
+                        return;
                     }
                 }
             }
@@ -1062,6 +1207,25 @@ function update() {
     
     processLightQueue();
     processRemoveQueue();
+    
+    hoveredItem = null;
+    if (isCraftingOpen || isFurnaceOpen) {
+        for (const key in slotCoords) {
+            const { x, y } = slotCoords[key];
+            if (mouse.x > x && mouse.x < x + SLOT_SIZE && mouse.y > y && mouse.y < y + SLOT_SIZE) {
+                const [arrayName, indexStr] = key.split('-');
+                const index = parseInt(indexStr);
+                if (arrayName === 'inv') hoveredItem = inventorySlots[index];
+                else if (arrayName === 'hotbar') hoveredItem = hotbarSlots[index];
+                else if (arrayName === 'crafting') hoveredItem = craftingGrid[index];
+                else if (arrayName === 'furnaceIn') hoveredItem = furnaceInput;
+                else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
+                else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
+                else if (arrayName === 'craftingOut') hoveredItem = craftingOutput;
+                break;
+            }
+        }
+    }
 
     const playerChunkX = Math.floor(toTileCoord(player.x + player.width/2) / CHUNK_SIZE);
     const playerChunkY = Math.floor(toTileCoord(player.y + player.height/2) / CHUNK_SIZE);
@@ -1130,12 +1294,15 @@ function processRemoveQueue() {
 function isTileSolid(tileX, tileY) {
     const tileType = getTile(tileX, tileY);
     
-    // Trees are not solid
-    if (tileType === TILES.WOOD_LOG || tileType === TILES.LEAVES) {
+    // Air, trees, and torches are not solid for physics
+    if (tileType === TILES.AIR || 
+        tileType === TILES.WOOD_LOG || 
+        tileType === TILES.LEAVES ||
+        tileType === TILES.TORCH) {
         return false;
     }
     
-    return isBlockSolid(tileType); // Check if it's a "full" block
+    return true; // All other blocks are solid
 }
 
 function toTileCoord(pixelCoord) {
@@ -1166,27 +1333,53 @@ function draw() {
     for (let y = startTileY; y < endTileY; y++) {
         for (let x = startTileX; x < endTileX; x++) {
             const tileType = getTile(x, y);
-            const baseColor = TILE_COLORS[tileType];
             
             let lightLevel = getLight(x, y);
-            if (isBlockSolid(tileType)) {
-                const lightAbove = getLight(x, y - 1);
-                const lightBelow = getLight(x, y + 1);
-                const lightLeft = getLight(x - 1, y);
-                const lightRight = getLight(x + 1, y);
-                lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
+            if (!isTileSolid(x, y) && isBlockSolid(tileType)) {
+                 const lightAbove = getLight(x, y - 1);
+                 const lightBelow = getLight(x, y + 1);
+                 const lightLeft = getLight(x - 1, y);
+                 const lightRight = getLight(x + 1, y);
+                 lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
+            } else if (isBlockSolid(tileType)) {
+                 const lightAbove = getLight(x, y - 1);
+                 const lightBelow = getLight(x, y + 1);
+                 const lightLeft = getLight(x - 1, y);
+                 const lightRight = getLight(x + 1, y);
+                 lightLevel = Math.max(lightAbove, lightBelow, lightLeft, lightRight);
             }
             
             const finalLightLevel = Math.max(lightLevel, MIN_GLOBAL_LIGHT);
             const finalLight = finalLightLevel / MAX_LIGHT;
             
-            if (tileType === TILES.AIR && finalLightLevel === MIN_GLOBAL_LIGHT && lightLevel === 0) {
-                 ctx.fillStyle = '#000000';
-            } else {
-                ctx.fillStyle = blendColor(baseColor, finalLight);
-            }
+            const spriteCoords = TILE_SPRITES[tileType];
             
-            ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            if (spriteCoords) {
+                ctx.globalAlpha = 1.0;
+                ctx.drawImage(
+                    textureAtlas, // Use generated atlas
+                    spriteCoords[0] * SPRITE_SIZE,
+                    spriteCoords[1] * SPRITE_SIZE,
+                    SPRITE_SIZE, SPRITE_SIZE,
+                    x * TILE_SIZE, y * TILE_SIZE,
+                    TILE_SIZE, TILE_SIZE
+                );
+                
+                const darkness = 1.0 - finalLight;
+                if (darkness > 0) {
+                    ctx.fillStyle = '#000000';
+                    ctx.globalAlpha = darkness;
+                    ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+                    ctx.globalAlpha = 1.0;
+                }
+            } else if (tileType === TILES.AIR) {
+                ctx.globalAlpha = 1.0;
+                ctx.fillStyle = blendColor(TILE_COLORS[TILES.AIR], finalLight);
+                if (finalLightLevel === MIN_GLOBAL_LIGHT && lightLevel === 0) {
+                     ctx.fillStyle = '#000000';
+                }
+                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+            }
         }
     }
 
@@ -1203,10 +1396,8 @@ function draw() {
 
     if (miningState.isMining) {
         const progress = miningState.progress / miningState.requiredTime;
-        // Draw 10-stage crack animation
         const crackFrame = Math.floor(progress * 10);
         if (crackFrame > 0) {
-            // This is a simple placeholder. We'll draw a white box that grows.
             const crackWidth = TILE_SIZE * (crackFrame / 10);
             const crackHeight = TILE_SIZE * (crackFrame / 10);
             ctx.fillStyle = `rgba(255, 255, 255, ${0.1 + progress * 0.3})`;
@@ -1238,13 +1429,25 @@ function draw() {
         drawFurnaceUI();
     }
     if (mouse.heldItem) {
-        ctx.fillStyle = TILE_COLORS[mouse.heldItem.id];
-        ctx.fillRect(mouse.x - (SLOT_SIZE/2) + 4, mouse.y - (SLOT_SIZE/2) + 4, SLOT_SIZE - 8, SLOT_SIZE - 8);
+        drawSprite(mouse.heldItem, mouse.x - (SLOT_SIZE/2), mouse.y - (SLOT_SIZE/2), SLOT_SIZE);
         ctx.fillStyle = '#FFFFFF';
         ctx.font = '14px Arial';
         ctx.textAlign = 'right';
         ctx.fillText(mouse.heldItem.count, mouse.x + SLOT_SIZE/2 - 4, mouse.y + SLOT_SIZE/2 - 4);
         ctx.textAlign = 'left';
+    }
+    
+    if (hoveredItem && !mouse.heldItem) {
+        const itemName = TILE_NAMES[hoveredItem.id];
+        ctx.font = '14px Arial';
+        const textWidth = ctx.measureText(itemName).width;
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillRect(mouse.x + 15, mouse.y + 15, textWidth + 8, 20);
+        
+        ctx.fillStyle = '#FFFFFF';
+        ctx.textAlign = 'left';
+        ctx.fillText(itemName, mouse.x + 19, mouse.y + 29);
     }
 }
 
@@ -1297,11 +1500,25 @@ function drawPlayer() {
     ctx.restore();
 }
 
+function drawSprite(item, x, y, size) {
+    if (!item) return;
+    const spriteCoords = TILE_SPRITES[item.id];
+    if (spriteCoords) {
+        ctx.drawImage(
+            textureAtlas, // Use generated atlas
+            spriteCoords[0] * SPRITE_SIZE,
+            spriteCoords[1] * SPRITE_SIZE,
+            SPRITE_SIZE, SPRITE_SIZE,
+            x, y, size, size
+        );
+    }
+}
+
 function drawSlotContents(slot, x, y) {
     const s = SLOT_SIZE;
     if (slot) {
-        ctx.fillStyle = TILE_COLORS[slot.id];
-        ctx.fillRect(x + 4, y + 4, s - 8, s - 8);
+        drawSprite(slot, x + 4, y + 4, s - 8);
+        
         ctx.fillStyle = '#FFFFFF';
         ctx.font = '14px Arial';
         ctx.textAlign = 'right';
@@ -1496,5 +1713,6 @@ function init() {
     console.log("Game started!");
 }
 
-// Start the game!
+// --- REMOVED all atlas.png loading ---
+// --- Start the game immediately ---
 init();
