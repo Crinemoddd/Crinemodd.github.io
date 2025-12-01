@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.13 (Rare Item & External Link) ---
+// --- GAME MAKER: v10.15 (Swords & Combat Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -16,7 +16,9 @@ const TILES = {
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
-    PLATINUM_INGOT: 111
+    PLATINUM_INGOT: 111,
+    WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
+    DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006
 };
 const TILE_NAMES = {
     [TILES.GRASS]: 'Grass', [TILES.DIRT]: 'Dirt', [TILES.STONE]: 'Stone', [TILES.IRON]: 'Iron Ore',
@@ -28,9 +30,14 @@ const TILE_NAMES = {
     [TILES.WOOD_PICKAXE]: 'Wood Pickaxe', [TILES.STONE_PICKAXE]: 'Stone Pickaxe',
     [TILES.COPPER_PICKAXE]: 'Copper Pickaxe', [TILES.IRON_PICKAXE]: 'Iron Pickaxe',
     [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe', [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe',
-    [TILES.PLATINUM_PICKAXE]: 'Platinum Pickaxe', [TILES.COPPER_INGOT]: 'Copper Ingot',
-    [TILES.IRON_INGOT]: 'Iron Ingot', [TILES.DIAMOND_INGOT]: 'Diamond',
-    [TILES.COBALT_INGOT]: 'Cobalt Ingot', [TILES.PLATINUM_INGOT]: 'Platinum Ingot'
+    [TILES.PLATINUM_PICKAXE]: 'Platinum Pickaxe',
+    [TILES.COPPER_INGOT]: 'Copper Ingot', [TILES.IRON_INGOT]: 'Iron Ingot',
+    [TILES.DIAMOND_INGOT]: 'Diamond', [TILES.COBALT_INGOT]: 'Cobalt Ingot',
+    [TILES.PLATINUM_INGOT]: 'Platinum Ingot',
+    [TILES.WOOD_SWORD]: 'Wood Sword', [TILES.STONE_SWORD]: 'Stone Sword',
+    [TILES.COPPER_SWORD]: 'Copper Sword', [TILES.IRON_SWORD]: 'Iron Sword',
+    [TILES.DIAMOND_SWORD]: 'Diamond Sword', [TILES.COBALT_SWORD]: 'Cobalt Sword',
+    [TILES.PLATINUM_SWORD]: 'Platinum Sword'
 };
 const TILE_COLORS = {
     [TILES.AIR]: '#87CEEB', [TILES.GRASS]: '#34A853', [TILES.DIRT]: '#8B4513',
@@ -42,8 +49,13 @@ const TILE_COLORS = {
     [TILES.USSR_BOOK]: '#CC0000',
     [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
     [TILES.IRON_PICKAXE]: '#D2B4D2', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
-    [TILES.PLATINUM_PICKAXE]: '#E5E4E2', [TILES.COPPER_INGOT]: '#B87333', [TILES.IRON_INGOT]: '#D2B4D2',
-    [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB', [TILES.PLATINUM_INGOT]: '#E5E4E2'
+    [TILES.PLATINUM_PICKAXE]: '#E5E4E2',
+    [TILES.COPPER_INGOT]: '#B87333', [TILES.IRON_INGOT]: '#D2B4D2',
+    [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB',
+    [TILES.PLATINUM_INGOT]: '#E5E4E2',
+    [TILES.WOOD_SWORD]: '#AF8F53', [TILES.STONE_SWORD]: '#808080', [TILES.COPPER_SWORD]: '#B87333',
+    [TILES.IRON_SWORD]: '#D2B4D2', [TILES.DIAMOND_SWORD]: '#B9F2FF', [TILES.COBALT_SWORD]: '#0047AB',
+    [TILES.PLATINUM_SWORD]: '#E5E4E2'
 };
 
 const TILE_SPRITES = {
@@ -78,7 +90,15 @@ const TILE_SPRITES = {
     [TILES.COBALT_INGOT]: [3, 2],
     [TILES.PLATINUM_INGOT]: [4, 2],
     [TILES.SLIME_GEL]: [5, 2],
-    [TILES.USSR_BOOK]: [6, 2], // NEW
+    [TILES.USSR_BOOK]: [6, 2],
+
+    [TILES.WOOD_SWORD]: [0, 3],
+    [TILES.STONE_SWORD]: [1, 3],
+    [TILES.COPPER_SWORD]: [2, 3],
+    [TILES.IRON_SWORD]: [3, 3],
+    [TILES.DIAMOND_SWORD]: [4, 3],
+    [TILES.COBALT_SWORD]: [5, 3],
+    [TILES.PLATINUM_SWORD]: [6, 3]
 };
 
 const BLOCK_OPACITY = {
@@ -132,6 +152,24 @@ const TOOL_POWER = {
     [TILES.DIAMOND_PICKAXE]: 6,
     [TILES.COBALT_PICKAXE]: 8,
     [TILES.PLATINUM_PICKAXE]: 10,
+};
+
+const WEAPON_DAMAGE = {
+    [TILES.WOOD_SWORD]: 7,
+    [TILES.STONE_SWORD]: 9,
+    [TILES.COPPER_SWORD]: 12,
+    [TILES.IRON_SWORD]: 12,
+    [TILES.DIAMOND_SWORD]: 16,
+    [TILES.COBALT_SWORD]: 20,
+    [TILES.PLATINUM_SWORD]: 25,
+    
+    [TILES.WOOD_PICKAXE]: 3,
+    [TILES.STONE_PICKAXE]: 4,
+    [TILES.COPPER_PICKAXE]: 5,
+    [TILES.IRON_PICKAXE]: 5,
+    [TILES.DIAMOND_PICKAXE]: 7,
+    [TILES.COBALT_PICKAXE]: 9,
+    [TILES.PLATINUM_PICKAXE]: 12,
 };
 
 // --- Procedural Texture Atlas Generator ---
@@ -230,14 +268,24 @@ function createTextureAtlas() {
                 atlasCtx.bezierCurveTo(sx + 16, sy + 6, sx + 16, sy + 14, sx + 8, sy + 14);
                 atlasCtx.fill();
                 break;
-            case TILES.USSR_BOOK: // NEW
+            case TILES.USSR_BOOK:
                 atlasCtx.clearRect(sx, sy, 16, 16);
                 atlasCtx.fillStyle = color; // Red
                 atlasCtx.fillRect(sx + 3, sy + 2, 10, 12);
                 atlasCtx.fillStyle = '#FFD700'; // Gold
-                // Simple star shape
                 atlasCtx.fillRect(sx + 7, sy + 4, 2, 8);
                 atlasCtx.fillRect(sx + 5, sy + 7, 6, 2);
+                break;
+            case TILES.WOOD_SWORD: case TILES.STONE_SWORD: case TILES.COPPER_SWORD:
+            case TILES.IRON_SWORD: case TILES.DIAMOND_SWORD: case TILES.COBALT_SWORD:
+            case TILES.PLATINUM_SWORD:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK]; // Handle
+                atlasCtx.fillRect(sx + 7, sy + 10, 2, 4);
+                atlasCtx.fillStyle = color; // Blade
+                atlasCtx.fillRect(sx + 6, sy + 2, 4, 8);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.WOOD_PLANK]; // Hilt
+                atlasCtx.fillRect(sx + 4, sy + 9, 8, 2);
                 break;
         }
     }
@@ -264,7 +312,8 @@ let player = {
     health: 100,
     maxHealth: 100,
     lastDamageTime: 0,
-    fallDistance: 0
+    fallDistance: 0,
+    attackCooldown: 0
 };
 let camera = { x: 0, y: 0 };
 let keys = { w: false, a: false, d: false, e: false };
@@ -307,7 +356,7 @@ const COOK_TIME = 200;
 // --- Light Engine ---
 const MAX_LIGHT = 15;
 const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
-const MIN_GLOBAL_LIGHT = 2;
+const MIN_GLOBAL_LIGHT = 3; // Lighter shadows
 let lightQueue = [];
 let removeQueue = [];
 
@@ -372,6 +421,31 @@ function addPickaxeRecipes() {
     }
 }
 addPickaxeRecipes();
+
+function addSwordRecipes() {
+    const materials = [
+        { id: TILES.WOOD_PLANK, sword: TILES.WOOD_SWORD },
+        { id: TILES.STONE, sword: TILES.STONE_SWORD },
+        { id: TILES.COPPER_INGOT, sword: TILES.COPPER_SWORD },
+        { id: TILES.IRON_INGOT, sword: TILES.IRON_SWORD },
+        { id: TILES.DIAMOND_INGOT, sword: TILES.DIAMOND_SWORD },
+        { id: TILES.COBALT_INGOT, sword: TILES.COBALT_SWORD },
+        { id: TILES.PLATINUM_INGOT, sword: TILES.PLATINUM_SWORD }
+    ];
+    for (const mat of materials) {
+        CRAFTING_RECIPES[TILE_NAMES[mat.sword]] = {
+            type: 'shaped',
+            pattern: [
+                [null, mat.id, null],
+                [null, mat.id, null],
+                [null, TILES.STICK, null]
+            ],
+            output: { id: mat.sword, count: 1 }
+        };
+    }
+}
+addSwordRecipes();
+
 const SMELT_RECIPES = {
     [TILES.COPPER_ORE]: TILES.COPPER_INGOT, [TILES.IRON_ORE]: TILES.IRON_INGOT,
     [TILES.DIAMOND]: TILES.DIAMOND_INGOT, [TILES.COBALT]: TILES.COBALT_INGOT,
@@ -674,7 +748,10 @@ function setupInputListeners() {
         if (mouse.tileX !== oldTileX || mouse.tileY !== oldTileY) {
             stopMining();
             if (mouse.isDown && !isCraftingOpen && !isFurnaceOpen) {
-                startMining(mouse.tileX, mouse.tileY);
+                const didAttack = tryAttack(mouse.tileX, mouse.tileY);
+                if (!didAttack) {
+                    startMining(mouse.tileX, mouse.tileY);
+                }
             }
         }
     });
@@ -690,7 +767,10 @@ function setupInputListeners() {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
             if (e.button === 0) {
-                startMining(mouse.tileX, mouse.tileY);
+                const didAttack = tryAttack(mouse.tileX, mouse.tileY);
+                if (!didAttack) {
+                    startMining(mouse.tileX, mouse.tileY);
+                }
             }
             if (e.button === 2) {
                 handleRightClick();
@@ -719,13 +799,25 @@ function resizeCanvas() {
 }
 
 // --- 8. Interaction Logic ---
-function startMining(x, y) {
+function tryAttack(x, y) {
+    if (player.attackCooldown > 0) return false;
+
     const enemy = getEnemyAt(x, y);
     if (enemy) {
-        damageEnemy(enemy, 10);
-        return;
+        const heldSlot = hotbarSlots[selectedSlot];
+        const heldId = heldSlot ? heldSlot.id : null;
+        const damage = WEAPON_DAMAGE[heldId] ?? 2; // Default 2 damage (hand)
+        
+        damageEnemy(enemy, damage);
+        player.attackCooldown = 30; // 0.5 sec cooldown
+        return true;
     }
+    return false;
+}
 
+function startMining(x, y) {
+    // --- BUG FIX: Removed redundant enemy check ---
+    
     const tileType = getTile(x, y);
     if (tileType === TILES.AIR) {
         stopMining();
@@ -744,8 +836,12 @@ function startMining(x, y) {
     const heldSlot = hotbarSlots[selectedSlot];
     const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
 
-    if (toolTier < requiredTier) {
-        console.log("Tool not strong enough!");
+    // Check if item is a sword
+    const isSword = heldSlot && heldSlot.id >= 1000;
+    
+    if (toolTier < requiredTier || isSword) {
+        if(isSword) console.log("Can't mine with a sword!");
+        else console.log("Tool not strong enough!");
         stopMining();
         return;
     }
@@ -804,11 +900,10 @@ function handleRightClick() {
     const block = getTile(mouse.tileX, mouse.tileY);
     const slot = hotbarSlots[selectedSlot];
     
-    // --- NEW: Book logic ---
     if (slot && slot.id === TILES.USSR_BOOK) {
         console.log("Opening Wikipedia page...");
         window.open('https://en.wikipedia.org/wiki/Soviet_Union', '_blank');
-        return; // Don't try to place the book
+        return;
     }
     
     if (block === TILES.CRAFTING_TABLE) {
@@ -823,7 +918,7 @@ function handleRightClick() {
 function placeBlock() {
     const slot = hotbarSlots[selectedSlot];
     if (!slot) return;
-    if (slot.id >= 100) return;
+    if (slot.id >= 100) return; // Cannot place tools, swords, etc.
 
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -1094,6 +1189,9 @@ function update() {
     if (player.lastDamageTime > 0) {
         player.lastDamageTime--;
     }
+    if (player.attackCooldown > 0) {
+        player.attackCooldown--;
+    }
     
     if (!isCraftingOpen && !isFurnaceOpen) {
         // --- Player Physics ---
@@ -1239,7 +1337,7 @@ function update() {
     if (Math.abs(targetCamY - camera.y) < 0.1) camera.y = targetCamY;
 }
 
-// --- NEW: Player Health & Damage ---
+// --- Player Health & Damage ---
 function takeDamage(amount) {
     if (player.lastDamageTime > 0) return; // Invincible
     
@@ -1263,7 +1361,6 @@ function takeDamage(amount) {
 function updatePlayerFallDamage(pixelsFallen) {
     if (pixelsFallen <= 0) return;
     
-    // Convert pixels to "blocks" fallen
     const blocksFallen = pixelsFallen / TILE_SIZE;
     if (blocksFallen > 4) { // Safe to fall 4 blocks
         const damage = Math.floor((blocksFallen - 4) * 5); // 5 damage per block
@@ -1273,7 +1370,7 @@ function updatePlayerFallDamage(pixelsFallen) {
     }
 }
 
-// --- NEW: Enemy Functions ---
+// --- Enemy Functions ---
 function spawnEnemy(x, y) {
     const enemy = {
         x: x, y: y,
@@ -1290,7 +1387,6 @@ function spawnEnemy(x, y) {
 }
 
 function getEnemyAt(x, y) {
-    // Check pixel coordinates
     const px = x * TILE_SIZE + TILE_SIZE / 2;
     const py = y * TILE_SIZE + TILE_SIZE / 2;
     
@@ -1304,19 +1400,17 @@ function getEnemyAt(x, y) {
 }
 
 function damageEnemy(enemy, amount) {
-    if (enemy.lastDamageTime > 0) return; // i-frames
+    if (enemy.lastDamageTime > 0) return;
     
     enemy.health -= amount;
-    enemy.lastDamageTime = 30; // 0.5 sec i-frames
-    enemy.vy = -3; // Knockback
+    enemy.lastDamageTime = 30;
+    enemy.vy = -3;
     enemy.vx = (enemy.x - player.x > 0 ? 1 : -1) * 2;
     
     if (enemy.health <= 0) {
-        // Drop loot
-        const dropAmount = Math.floor(Math.random() * 3) + 1; // 1-3 gel
+        const dropAmount = Math.floor(Math.random() * 3) + 1;
         addItemToInventory({ id: TILES.SLIME_GEL, count: dropAmount });
         
-        // --- NEW: RARE DROP ---
         if (Math.random() < 0.00005) { // 0.005%
             console.log("!!! RARE DROP !!!");
             addItemToInventory({ id: TILES.USSR_BOOK, count: 1 });
@@ -1337,11 +1431,9 @@ function updateEnemies() {
             enemy.lastDamageTime--;
         }
 
-        // --- Enemy Physics (Simplified) ---
         enemy.vy += GRAVITY;
         let newY = enemy.y + enemy.vy;
         
-        // Y-Collision
         let tileX1 = toTileCoord(enemy.x);
         let tileX2 = toTileCoord(enemy.x + enemy.width);
         let tileY = toTileCoord(newY + enemy.height);
@@ -1355,7 +1447,6 @@ function updateEnemies() {
             enemy.isOnGround = false;
         }
         
-        // X-Collision (simplified)
         let newX = enemy.x + enemy.vx;
         let tileX = toTileCoord(newX + (enemy.vx > 0 ? enemy.width : 0));
         let tileY1 = toTileCoord(enemy.y);
@@ -1366,32 +1457,28 @@ function updateEnemies() {
             enemy.x += enemy.vx;
         }
         
-        // Slow down
         if (enemy.isOnGround) {
             enemy.vx *= 0.8;
         }
         
-        // --- Slime AI ---
         enemy.aiTimer--;
         if (enemy.aiTimer <= 0 && enemy.isOnGround) {
             const dist = player.x - enemy.x;
-            if (Math.abs(dist) < TILE_SIZE * 10) { // If player is close
-                enemy.vy = JUMP_STRENGTH / 1.5; // Short jump
-                enemy.vx = (dist > 0 ? 1 : -1) * 2; // Move towards player
+            if (Math.abs(dist) < TILE_SIZE * 10) {
+                enemy.vy = JUMP_STRENGTH / 1.5;
+                enemy.vx = (dist > 0 ? 1 : -1) * 2;
                 enemy.isOnGround = false;
             }
-            enemy.aiTimer = Math.random() * 100 + 80; // 1.3 to 3 sec
+            enemy.aiTimer = Math.random() * 100 + 80;
         }
         
-        // --- Check Player Collision ---
         if (player.lastDamageTime === 0 &&
             player.x < enemy.x + enemy.width &&
             player.x + player.width > enemy.x &&
             player.y < enemy.y + enemy.height &&
             player.y + player.height > enemy.y)
         {
-            takeDamage(5); // Slime deals 5 damage
-            // Knockback player
+            takeDamage(5);
             player.vy = -4;
             player.vx = (player.x - enemy.x > 0 ? 1 : -1) * 4;
         }
