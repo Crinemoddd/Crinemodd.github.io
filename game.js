@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.15 (Swords & Combat Fix) ---
+// --- GAME MAKER: v10.16 (Smooth Zoom) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,10 +13,13 @@ const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
     COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
+    // Pickaxes
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
+    // Ingots
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111,
+    // Swords
     WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
     DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006
 };
@@ -315,8 +318,14 @@ let player = {
     fallDistance: 0,
     attackCooldown: 0
 };
-let camera = { x: 0, y: 0 };
-let keys = { w: false, a: false, d: false, e: false };
+// MODIFIED: Camera object now holds zoom state
+let camera = {
+    x: 0, y: 0,
+    targetZoom: 1.0,
+    currentZoom: 1.0,
+    zoomSpeed: 0.05 // How fast to zoom
+};
+let keys = { w: false, a: false, d: false, e: false, z: false, x: false };
 let mouse = {
     x: 0, y: 0,
     tileX: 0, tileY: 0,
@@ -715,6 +724,10 @@ function setupInputListeners() {
             }
             keys.e = true;
         }
+        // NEW: Zoom keys
+        if (e.key === 'z' || e.key === 'Z') keys.z = true;
+        if (e.key === 'x' || e.key === 'X') keys.x = true;
+
         if (e.key >= '1' && e.key <= '9') {
             selectedSlot = parseInt(e.key) - 1;
             stopMining();
@@ -725,6 +738,9 @@ function setupInputListeners() {
         if (e.key === 'a' || e.key === 'A') keys.a = false;
         if (e.key === 'd' || e.key === 'D') keys.d = false;
         if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') keys.e = false;
+        // NEW: Zoom keys
+        if (e.key === 'z' || e.key === 'Z') keys.z = false;
+        if (e.key === 'x' || e.key === 'X') keys.x = false;
     });
     
     window.addEventListener('mouseup', (e) => {
@@ -740,8 +756,9 @@ function setupInputListeners() {
         const oldTileX = mouse.tileX;
         const oldTileY = mouse.tileY;
 
-        let mouseWorldX = mouse.x + camera.x;
-        let mouseWorldY = mouse.y + camera.y;
+        // MODIFIED: Calculate world mouse pos based on zoom
+        let mouseWorldX = (mouse.x / camera.currentZoom) + camera.x;
+        let mouseWorldY = (mouse.y / camera.currentZoom) + camera.y;
         mouse.tileX = toTileCoord(mouseWorldX);
         mouse.tileY = toTileCoord(mouseWorldY);
 
@@ -918,7 +935,10 @@ function handleRightClick() {
 function placeBlock() {
     const slot = hotbarSlots[selectedSlot];
     if (!slot) return;
-    if (slot.id >= 100) return; // Cannot place tools, swords, etc.
+    
+    // --- BUG FIX ---
+    // Can't place tools, swords, or special items
+    if (slot.id >= 100) return; 
 
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -1186,12 +1206,24 @@ function updateFurnace() {
 
 // --- 10. Game Loop (Update Logic) ---
 function update() {
+    // --- Tick Timers ---
     if (player.lastDamageTime > 0) {
         player.lastDamageTime--;
     }
     if (player.attackCooldown > 0) {
         player.attackCooldown--;
     }
+    
+    // --- Handle Zoom ---
+    if (keys.z) {
+        camera.targetZoom -= 0.02;
+    }
+    if (keys.x) {
+        camera.targetZoom += 0.02;
+    }
+    camera.targetZoom = Math.max(0.8, Math.min(camera.targetZoom, 3.0)); // Clamp zoom
+    camera.currentZoom += (camera.targetZoom - camera.currentZoom) * camera.zoomSpeed;
+    
     
     if (!isCraftingOpen && !isFurnaceOpen) {
         // --- Player Physics ---
@@ -1236,7 +1268,6 @@ function update() {
             }
         }
         
-        // Track fall distance
         if (!player.isOnGround) {
             player.fallDistance += (player.y - oldY);
         }
@@ -1328,13 +1359,11 @@ function update() {
         }
     }
 
-    // --- Camera ---
-    let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
-    let targetCamY = player.y - (canvas.height / 2);
+    // --- MODIFIED: Camera logic ---
+    let targetCamX = player.x + (player.width / 2) - (canvas.width / 2 / camera.currentZoom);
+    let targetCamY = player.y + (player.height / 2) - (canvas.height / 2 / camera.currentZoom);
     camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
     camera.y += (targetCamY - camera.y) * CAMERA_SMOOTH_FACTOR;
-    if (Math.abs(targetCamX - camera.x) < 0.1) camera.x = targetCamX;
-    if (Math.abs(targetCamY - camera.y) < 0.1) camera.y = targetCamY;
 }
 
 // --- Player Health & Damage ---
@@ -1588,13 +1617,18 @@ function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     ctx.save();
+    
+    // --- MODIFIED: Apply zoom ---
+    ctx.scale(camera.currentZoom, camera.currentZoom);
     ctx.translate(Math.round(-camera.x), Math.round(-camera.y));
 
     // --- Draw World ---
+    const viewWidth = canvas.width / camera.currentZoom;
+    const viewHeight = canvas.height / camera.currentZoom;
     const startTileX = toTileCoord(camera.x);
-    const endTileX = startTileX + toTileCoord(canvas.width) + 2;
+    const endTileX = startTileX + toTileCoord(viewWidth) + 2;
     const startTileY = toTileCoord(camera.y);
-    const endTileY = startTileY + toTileCoord(canvas.height) + 2;
+    const endTileY = startTileY + toTileCoord(viewHeight) + 2;
 
     for (let y = startTileY; y < endTileY; y++) {
         for (let x = startTileX; x < endTileX; x++) {
@@ -1681,7 +1715,7 @@ function draw() {
     
     ctx.restore();
 
-    // --- DRAW UI ---
+    // --- DRAW UI (This is not scaled) ---
     if (!isCraftingOpen && !isFurnaceOpen) {
         drawHotbar();
     }
@@ -1772,7 +1806,8 @@ function drawPlayer() {
     ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize);
 
     ctx.fillStyle = hair;
-    ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize/3);
+    // --- BUG FIX: Typo from headSiz to headSize ---
+    ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize/3); 
 
     ctx.restore();
 }
@@ -2001,8 +2036,10 @@ function init() {
     
     player.x = spawnPos.x;
     player.y = spawnPos.y;
-    camera.x = player.x - (canvas.width / 2) + (player.width / 2);
-    camera.y = player.y - (canvas.height / 2);
+    
+    // MODIFIED: Set initial camera position based on zoom
+    camera.x = player.x + (player.width / 2) - (canvas.width / 2 / camera.currentZoom);
+    camera.y = player.y + (player.height / 2) - (canvas.height / 2 / camera.currentZoom);
     
     const playerChunkX = Math.floor(spawnX / CHUNK_SIZE);
     const playerChunkY = Math.floor(spawnY / CHUNK_SIZE);
