@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.17 (Pop-up UI & Steve Doll) ---
+// --- GAME MAKER: v10.17 (The Obama Update) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,16 +13,22 @@ const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
     COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
+    // Obama Blocks
+    BARK_OBAMA: 19, LEAVE_OBAMA: 20, OBAMA_PLANK: 21, ORE_BAMA: 22,
+
     // Pickaxes
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
     // Ingots
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111,
+    // Obama Items
+    STICK_OBAMA: 112, OBAMA_INGOT: 113,
+    
     // Swords
     WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
-    DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006
-    // Armor items will be added later
+    DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006,
+    OBAMA_BLADE: 1007,
 };
 const TILE_NAMES = {
     [TILES.GRASS]: 'Grass', [TILES.DIRT]: 'Dirt', [TILES.STONE]: 'Stone', [TILES.IRON]: 'Iron Ore',
@@ -31,6 +37,10 @@ const TILE_NAMES = {
     [TILES.WOOD_PLANK]: 'Wood Plank', [TILES.CRAFTING_TABLE]: 'Crafting Table', [TILES.STICK]: 'Stick',
     [TILES.COAL]: 'Coal', [TILES.FURNACE]: 'Furnace', [TILES.TORCH]: 'Torch', [TILES.SLIME_GEL]: 'Slime Gel',
     [TILES.USSR_BOOK]: 'Book: USSR',
+    [TILES.BARK_OBAMA]: 'BarkObama', [TILES.LEAVE_OBAMA]: 'Leave Obama', [TILES.OBAMA_PLANK]: 'ObamaPlank',
+    [TILES.ORE_BAMA]: 'OreBama', [TILES.STICK_OBAMA]: 'StickObama', [TILES.OBAMA_INGOT]: 'ObamaIngot',
+    [TILES.OBAMA_BLADE]: 'ObamaBlade',
+
     [TILES.WOOD_PICKAXE]: 'Wood Pickaxe', [TILES.STONE_PICKAXE]: 'Stone Pickaxe',
     [TILES.COPPER_PICKAXE]: 'Copper Pickaxe', [TILES.IRON_PICKAXE]: 'Iron Pickaxe',
     [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe', [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe',
@@ -51,6 +61,11 @@ const TILE_COLORS = {
     [TILES.CRAFTING_TABLE]: '#A07040', [TILES.STICK]: '#8B4513', [TILES.COAL]: '#2E2E2E',
     [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500', [TILES.SLIME_GEL]: '#00BFFF',
     [TILES.USSR_BOOK]: '#CC0000',
+    
+    [TILES.BARK_OBAMA]: '#4a2a0a', [TILES.LEAVE_OBAMA]: '#00008b', [TILES.OBAMA_PLANK]: '#9a6a4a',
+    [TILES.ORE_BAMA]: '#808080', [TILES.STICK_OBAMA]: '#a07040', [TILES.OBAMA_INGOT]: '#0000CD',
+    [TILES.OBAMA_BLADE]: '#FF0000',
+
     [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
     [TILES.IRON_PICKAXE]: '#D2B4D2', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
     [TILES.PLATINUM_PICKAXE]: '#E5E4E2',
@@ -95,6 +110,7 @@ const TILE_SPRITES = {
     [TILES.PLATINUM_INGOT]: [4, 2],
     [TILES.SLIME_GEL]: [5, 2],
     [TILES.USSR_BOOK]: [6, 2],
+    [TILES.ORE_BAMA]: [7, 2],
 
     [TILES.WOOD_SWORD]: [0, 3],
     [TILES.STONE_SWORD]: [1, 3],
@@ -102,7 +118,14 @@ const TILE_SPRITES = {
     [TILES.IRON_SWORD]: [3, 3],
     [TILES.DIAMOND_SWORD]: [4, 3],
     [TILES.COBALT_SWORD]: [5, 3],
-    [TILES.PLATINUM_SWORD]: [6, 3]
+    [TILES.PLATINUM_SWORD]: [6, 3],
+    [TILES.OBAMA_BLADE]: [7, 3],
+    
+    [TILES.BARK_OBAMA]: [0, 4],
+    [TILES.LEAVE_OBAMA]: [1, 4],
+    [TILES.OBAMA_PLANK]: [2, 4],
+    [TILES.STICK_OBAMA]: [3, 4],
+    [TILES.OBAMA_INGOT]: [4, 4],
 };
 
 const BLOCK_OPACITY = {
@@ -112,7 +135,8 @@ const BLOCK_OPACITY = {
     [TILES.GRASS]: 16, [TILES.DIRT]: 16, [TILES.STONE]: 16, [TILES.IRON]: 16,
     [TILES.COPPER]: 16, [TILES.DIAMOND]: 16, [TILES.COBALT]: 16, [TILES.PLATINUM]: 16,
     [TILES.WOOD_LOG]: 16, [TILES.WOOD_PLANK]: 16, [TILES.CRAFTING_TABLE]: 16,
-    [TILES.COAL]: 16, [TILES.FURNACE]: 16
+    [TILES.COAL]: 16, [TILES.FURNACE]: 16,
+    [TILES.BARK_OBAMA]: 16, [TILES.LEAVE_OBAMA]: 2, [TILES.OBAMA_PLANK]: 16, [TILES.ORE_BAMA]: 16
 };
 function getBlockOpacity(tileId) {
     return BLOCK_OPACITY[tileId] ?? 16;
@@ -126,7 +150,9 @@ const BLOCK_TIER = {
     [TILES.DIRT]: 0, [TILES.GRASS]: 0, [TILES.WOOD_LOG]: 0, [TILES.LEAVES]: 0,
     [TILES.STONE]: 1, [TILES.COAL]: 1, [TILES.COPPER]: 2, [TILES.IRON]: 2,
     [TILES.DIAMOND]: 3, [TILES.COBALT]: 4, [TILES.PLATINUM]: 5,
-    [TILES.CRAFTING_TABLE]: 0, [TILES.FURNACE]: 1, [TILES.TORCH]: 0
+    [TILES.CRAFTING_TABLE]: 0, [TILES.FURNACE]: 1, [TILES.TORCH]: 0,
+    [TILES.BARK_OBAMA]: 0, [TILES.LEAVE_OBAMA]: 0, [TILES.OBAMA_PLANK]: 0,
+    [TILES.ORE_BAMA]: 6 // Needs Platinum Pickaxe
 };
 const TOOL_TIER = {
     [TILES.WOOD_PICKAXE]: 1,
@@ -146,7 +172,9 @@ const BLOCK_HARDNESS = {
     [TILES.DIAMOND]: 60, [TILES.COBALT]: 70,
     [TILES.PLATINUM]: 80,
     [TILES.CRAFTING_TABLE]: 20, [TILES.FURNACE]: 30,
-    [TILES.TORCH]: 1
+    [TILES.TORCH]: 1,
+    [TILES.BARK_OBAMA]: 20, [TILES.LEAVE_OBAMA]: 2, [TILES.OBAMA_PLANK]: 20,
+    [TILES.ORE_BAMA]: 100
 };
 const TOOL_POWER = {
     [TILES.WOOD_PICKAXE]: 2,
@@ -166,6 +194,7 @@ const WEAPON_DAMAGE = {
     [TILES.DIAMOND_SWORD]: 16,
     [TILES.COBALT_SWORD]: 20,
     [TILES.PLATINUM_SWORD]: 25,
+    [TILES.OBAMA_BLADE]: 99999999,
     
     [TILES.WOOD_PICKAXE]: 3,
     [TILES.STONE_PICKAXE]: 4,
@@ -291,6 +320,53 @@ function createTextureAtlas() {
                 atlasCtx.fillStyle = TILE_COLORS[TILES.WOOD_PLANK]; // Hilt
                 atlasCtx.fillRect(sx + 4, sy + 9, 8, 2);
                 break;
+            
+            // --- NEW OBAMA SPRITES ---
+            case TILES.ORE_BAMA:
+                noise(atlasCtx, sx, sy, 16, 16, 0.2); // stone noise
+                atlasCtx.fillStyle = '#FF0000'; // Red flecks
+                for (let i = 0; i < 5; i++) atlasCtx.fillRect(sx + Math.random() * 14, sy + Math.random() * 14, 2, 2);
+                atlasCtx.fillStyle = '#0000FF'; // Blue flecks
+                for (let i = 0; i < 5; i++) atlasCtx.fillRect(sx + Math.random() * 14, sy + Math.random() * 14, 2, 2);
+                break;
+            case TILES.BARK_OBAMA:
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
+                atlasCtx.fillRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = '#C0C0C0'; // Inner wood
+                atlasCtx.fillRect(sx + 2, sy + 2, 12, 12);
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
+                for (let i = 0; i < 16; i += 4) atlasCtx.fillRect(sx + i, sy, 1, 16);
+                break;
+            case TILES.LEAVE_OBAMA:
+                noise(atlasCtx, sx, sy, 16, 16, 0.3);
+                break;
+            case TILES.OBAMA_PLANK:
+                atlasCtx.fillStyle = 'rgba(0,0,0,0.1)';
+                for (let i = 0; i < 16; i += 4) atlasCtx.fillRect(sx, sy + i, 16, 1);
+                break;
+            case TILES.STICK_OBAMA:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK_OBAMA];
+                atlasCtx.fillRect(sx + 6, sy + 2, 4, 12);
+                break;
+            case TILES.OBAMA_INGOT:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = color;
+                atlasCtx.fillRect(sx + 3, sy + 4, 10, 8);
+                atlasCtx.fillStyle = 'rgba(255,255,255,0.3)';
+                atlasCtx.fillRect(sx + 3, sy + 4, 10, 2);
+                break;
+            case TILES.OBAMA_BLADE:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK_OBAMA]; // Handle
+                atlasCtx.fillRect(sx + 7, sy + 10, 2, 4);
+                atlasCtx.fillStyle = '#FFFFFF'; // Hilt
+                atlasCtx.fillRect(sx + 4, sy + 9, 8, 2);
+                atlasCtx.fillStyle = color; // Red Blade
+                atlasCtx.fillRect(sx + 6, sy + 2, 4, 8);
+                atlasCtx.fillStyle = '#0000FF'; // Blue Tip
+                atlasCtx.fillRect(sx + 6, sy, 4, 2);
+                break;
         }
     }
     
@@ -350,7 +426,6 @@ let hotbarSlots = new Array(9).fill(null);
 let inventorySlots = new Array(27).fill(null);
 let selectedSlot = 0;
 
-// --- MODIFIED: UI States & Grids ---
 let isInventoryOpen = false;
 let isCraftingTableOpen = false;
 let isFurnaceOpen = false;
@@ -363,7 +438,6 @@ let tableCraftingOutput = null;
 let helmetSlot = null;
 let chestplateSlot = null;
 let leggingsSlot = null;
-// ---
 
 let furnaceInput = null;
 let furnaceFuel = null;
@@ -415,6 +489,16 @@ const CRAFTING_RECIPES = {
         type: 'shapeless',
         input: [{id: TILES.WOOD_LOG, count: 1}, {id: TILES.COAL, count: 1}],
         output: {id: TILES.TORCH, count: 4}
+    },
+    // --- NEW OBAMA RECIPES ---
+    OBAMA_PLANK: {
+        type: 'shapeless', input: [{ id: TILES.BARK_OBAMA, count: 1 }],
+        output: { id: TILES.OBAMA_PLANK, count: 4 }
+    },
+    STICK_OBAMA: {
+        type: 'shaped',
+        pattern: [[TILES.OBAMA_PLANK], [TILES.OBAMA_PLANK]],
+        output: { id: TILES.STICK_OBAMA, count: 4 }
     }
 };
 function addPickaxeRecipes() {
@@ -449,15 +533,18 @@ function addSwordRecipes() {
         { id: TILES.IRON_INGOT, sword: TILES.IRON_SWORD },
         { id: TILES.DIAMOND_INGOT, sword: TILES.DIAMOND_SWORD },
         { id: TILES.COBALT_INGOT, sword: TILES.COBALT_SWORD },
-        { id: TILES.PLATINUM_INGOT, sword: TILES.PLATINUM_SWORD }
+        { id: TILES.PLATINUM_INGOT, sword: TILES.PLATINUM_SWORD },
+        // --- NEW OBAMA SWORD ---
+        { id: TILES.OBAMA_INGOT, sword: TILES.OBAMA_BLADE, stick: TILES.STICK_OBAMA }
     ];
     for (const mat of materials) {
+        const stickType = mat.stick ?? TILES.STICK; // Use StickObama if specified, else normal stick
         CRAFTING_RECIPES[TILE_NAMES[mat.sword]] = {
             type: 'shaped',
             pattern: [
                 [null, mat.id, null],
                 [null, mat.id, null],
-                [null, TILES.STICK, null]
+                [null, stickType, null]
             ],
             output: { id: mat.sword, count: 1 }
         };
@@ -468,10 +555,12 @@ addSwordRecipes();
 const SMELT_RECIPES = {
     [TILES.COPPER_ORE]: TILES.COPPER_INGOT, [TILES.IRON_ORE]: TILES.IRON_INGOT,
     [TILES.DIAMOND]: TILES.DIAMOND_INGOT, [TILES.COBALT]: TILES.COBALT_INGOT,
-    [TILES.PLATINUM]: TILES.PLATINUM_INGOT, [TILES.WOOD_LOG]: TILES.COAL
+    [TILES.PLATINUM]: TILES.PLATINUM_INGOT, [TILES.WOOD_LOG]: TILES.COAL,
+    [TILES.ORE_BAMA]: TILES.OBAMA_INGOT // NEW
 };
 const FUEL_TIMES = {
-    [TILES.WOOD_LOG]: 150, [TILES.WOOD_PLANK]: 75, [TILES.COAL]: 800
+    [TILES.WOOD_LOG]: 150, [TILES.WOOD_PLANK]: 75, [TILES.COAL]: 800,
+    [TILES.BARK_OBAMA]: 150, [TILES.OBAMA_PLANK]: 75 // New fuels
 };
 
 // --- 5. Chunk Management ---
@@ -505,6 +594,7 @@ function generateChunk(chunkX, chunkY) {
                 else if (oreNoise > 0.8) chunk[y][x] = TILES.DIAMOND;
                 else if (oreNoise > 0.85) chunk[y][x] = TILES.COBALT;
                 else if (oreNoise > 0.9) chunk[y][x] = TILES.PLATINUM;
+                else if (oreNoise > 0.95) chunk[y][x] = TILES.ORE_BAMA; // NEW ORE
             }
             if (chunk[y][x] === TILES.DIRT || chunk[y][x] === TILES.STONE) {
                 let caveNoise = simplex.noise2D(globalX / CAVE_NOISE_SCALE, globalY / CAVE_NOISE_SCALE);
@@ -611,13 +701,21 @@ function findSurfaceY(globalX) {
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
 function generateTreeInChunk(chunk, x, y) {
+    // --- NEW: Tree Type Logic ---
+    let logType = TILES.WOOD_LOG;
+    let leafType = TILES.LEAVES;
+    if (Math.random() < 0.05) { // 5% chance of Obama Tree
+        logType = TILES.BARK_OBAMA;
+        leafType = TILES.LEAVE_OBAMA;
+    }
+    
     const trunkHeight = Math.floor(Math.random() * 3) + 4;
     
     for (let i = 0; i < trunkHeight; i++) {
         const currentY = y - i;
         if (currentY < 0) break;
         if (chunk[currentY][x] === TILES.AIR) {
-            chunk[currentY][x] = TILES.WOOD_LOG;
+            chunk[currentY][x] = logType; // Use logType
         }
     }
     const leafBaseY = y - trunkHeight;
@@ -625,7 +723,7 @@ function generateTreeInChunk(chunk, x, y) {
         const newX = x + lx;
         const newY = ly;
         if (newX >= 0 && newX < CHUNK_SIZE && newY >= 0 && newY < CHUNK_SIZE && chunk[newY][newX] === TILES.AIR) {
-            chunk[newY][newX] = TILES.LEAVES;
+            chunk[newY][newX] = leafType; // Use leafType
         }
     };
     
@@ -690,7 +788,7 @@ function addItemToInventory(itemStack) {
 }
 
 function addBlockToInventory(tileType) {
-    if (tileType === TILES.AIR || tileType === TILES.LEAVES) return;
+    if (tileType === TILES.AIR || tileType === TILES.LEAVES || tileType === TILES.LEAVE_OBAMA) return;
     let itemStack = { id: tileType, count: 1 };
     let remaining = addItemToInventory(itemStack);
     if (remaining) {
@@ -889,9 +987,6 @@ function stopMining() {
     miningState.progress = 0;
 }
 
-
-// --- REMOVED: updateSunlightColumn() ---
-
 function handleRightClick() {
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -955,7 +1050,6 @@ function placeBlock() {
         } else if (isBlockSolid(slot.id)) {
             setLight(mouse.tileX, mouse.tileY, 0);
             // --- LAG FIX: Removed updateSunlightColumn() ---
-            // Nudge neighbors to recalculate sunlight
             const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
             if (lightAbove === AMBIENT_LIGHT_LEVEL) {
                  lightQueue.push([mouse.tileX, mouse.tileY - 1]);
@@ -1686,7 +1780,9 @@ function isTileSolid(tileX, tileY) {
     if (tileType === TILES.AIR || 
         tileType === TILES.WOOD_LOG || 
         tileType === TILES.LEAVES ||
-        tileType === TILES.TORCH) {
+        tileType === TILES.TORCH ||
+        tileType === TILES.BARK_OBAMA || // Obama tree not solid
+        tileType === TILES.LEAVE_OBAMA) {
         return false;
     }
     return true;
@@ -1901,7 +1997,6 @@ function drawPlayer() {
     ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize);
 
     ctx.fillStyle = hair;
-    // --- BUG FIX: Typo from headSiz to headSize ---
     ctx.fillRect(-headSize/2, headY - headSize/2, headSize, headSize/3); 
 
     ctx.restore();
@@ -2009,11 +2104,10 @@ function drawHotbar() {
 
 function drawSlot(slot, x, y) {
     const s = SLOT_SIZE;
-    ctx.fillStyle = '#707070'; // MODIFIED: Solid dark grey
+    ctx.fillStyle = '#707070'; // Solid dark grey
     ctx.fillRect(x, y, s, s);
     drawSlotContents(slot, x, y);
 }
-
 
 function drawMainInventory(startX, startY) {
     const s = SLOT_SIZE;
@@ -2040,18 +2134,15 @@ function drawPlayerInventoryScreen() {
     slotCoords = {};
     const s = SLOT_SIZE; const p = SLOT_PADDING;
 
-    // --- NEW: Pop-up window dimensions ---
     const invGridWidth = 9 * (s + p) + p;
-    const uiWidth = invGridWidth + 100; // Width for inventory + crafting/armor
-    const uiHeight = (4 * (s + p) + p + 10) + 100; // Height for inv + crafting/armor
+    const uiWidth = invGridWidth + 100;
+    const uiHeight = (4 * (s + p) + p + 10) + 100;
     
     const startX = (canvas.width - uiWidth) / 2;
     const startY = (canvas.height - uiHeight) / 2;
     
-    // Draw the pop-up background
     ctx.fillStyle = '#C0C0C0';
     ctx.fillRect(startX, startY, uiWidth, uiHeight);
-    // Border
     ctx.strokeStyle = '#373737';
     ctx.lineWidth = 4;
     ctx.strokeRect(startX, startY, uiWidth, uiHeight);
@@ -2091,7 +2182,7 @@ function drawPlayerInventoryScreen() {
     const playerDollX = startX + 30;
     const playerDollY = startY + 20;
     
-    // Draw "Steve" doll
+    // --- NEW: Steve Doll ---
     ctx.fillStyle = '#623B20'; // Hair
     ctx.fillRect(playerDollX, playerDollY, 40, 10);
     ctx.fillStyle = '#E0A07E'; // Skin
@@ -2100,8 +2191,7 @@ function drawPlayerInventoryScreen() {
     ctx.fillRect(playerDollX, playerDollY + 20, 40, 30);
     ctx.fillStyle = '#304060'; // Pants
     ctx.fillRect(playerDollX, playerDollY + 50, 40, 30);
-
-    // Draw Armor Slots
+    
     const armorSlotX = playerDollX + 50 + p;
     
     slotCoords['armor-0'] = { x: armorSlotX, y: playerDollY };
@@ -2124,13 +2214,12 @@ function drawCraftingTableUI() {
     const s = SLOT_SIZE; const p = SLOT_PADDING;
     
     const invGridWidth = 9 * (s + p) + p;
-    const uiWidth = invGridWidth; // Crafting table UI is just inventory width
-    const uiHeight = (4 * (s + p) + p + 10) + 110; // Taller for 3x3 grid
+    const uiWidth = invGridWidth;
+    const uiHeight = (4 * (s + p) + p + 10) + 110;
     
     const startX = (canvas.width - uiWidth) / 2;
     const startY = (canvas.height - uiHeight) / 2;
     
-    // Draw the pop-up background
     ctx.fillStyle = '#C0C0C0';
     ctx.fillRect(startX, startY, uiWidth, uiHeight);
     ctx.strokeStyle = '#373737';
@@ -2184,7 +2273,6 @@ function drawFurnaceUI() {
     const startX = (canvas.width - uiWidth) / 2;
     const startY = (canvas.height - uiHeight) / 2;
 
-    // Draw the pop-up background
     ctx.fillStyle = '#C0C0C0';
     ctx.fillRect(startX, startY, uiWidth, uiHeight);
     ctx.strokeStyle = '#373737';
@@ -2218,7 +2306,6 @@ function drawFurnaceUI() {
     ctx.font = '30px Arial';
     ctx.fillText('->', furnaceX + (s+p) + 10, outputY + s/1.5);
     
-    // Progress bar
     ctx.fillStyle = '#444';
     ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s, 4);
     if(furnaceCookTime > 0) {
@@ -2227,7 +2314,6 @@ function drawFurnaceUI() {
         ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s * progress, 4);
     }
     
-    // Fuel bar
     ctx.fillStyle = '#444';
     ctx.fillRect(fuelX, fuelY - 8, s, 4);
     if(furnaceFuelTime > 0) {
