@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.16 (Smooth Zoom) ---
+// --- GAME MAKER: v10.15 (Lag Fix & Lighter Shadows) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -318,12 +318,11 @@ let player = {
     fallDistance: 0,
     attackCooldown: 0
 };
-// MODIFIED: Camera object now holds zoom state
 let camera = {
     x: 0, y: 0,
     targetZoom: 1.0,
     currentZoom: 1.0,
-    zoomSpeed: 0.05 // How fast to zoom
+    zoomSpeed: 0.05
 };
 let keys = { w: false, a: false, d: false, e: false, z: false, x: false };
 let mouse = {
@@ -724,7 +723,6 @@ function setupInputListeners() {
             }
             keys.e = true;
         }
-        // NEW: Zoom keys
         if (e.key === 'z' || e.key === 'Z') keys.z = true;
         if (e.key === 'x' || e.key === 'X') keys.x = true;
 
@@ -738,7 +736,6 @@ function setupInputListeners() {
         if (e.key === 'a' || e.key === 'A') keys.a = false;
         if (e.key === 'd' || e.key === 'D') keys.d = false;
         if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') keys.e = false;
-        // NEW: Zoom keys
         if (e.key === 'z' || e.key === 'Z') keys.z = false;
         if (e.key === 'x' || e.key === 'X') keys.x = false;
     });
@@ -756,7 +753,6 @@ function setupInputListeners() {
         const oldTileX = mouse.tileX;
         const oldTileY = mouse.tileY;
 
-        // MODIFIED: Calculate world mouse pos based on zoom
         let mouseWorldX = (mouse.x / camera.currentZoom) + camera.x;
         let mouseWorldY = (mouse.y / camera.currentZoom) + camera.y;
         mouse.tileX = toTileCoord(mouseWorldX);
@@ -966,7 +962,8 @@ function placeBlock() {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
             setLight(mouse.tileX, mouse.tileY, 0);
-            updateSunlightColumn(mouse.tileX);
+            // --- LAG FIX: Removed updateSunlightColumn() ---
+            // The setLight(0) call will trigger the removeQueue, which is correct.
         }
     }
 }
@@ -1206,7 +1203,6 @@ function updateFurnace() {
 
 // --- 10. Game Loop (Update Logic) ---
 function update() {
-    // --- Tick Timers ---
     if (player.lastDamageTime > 0) {
         player.lastDamageTime--;
     }
@@ -1214,14 +1210,13 @@ function update() {
         player.attackCooldown--;
     }
     
-    // --- Handle Zoom ---
     if (keys.z) {
         camera.targetZoom -= 0.02;
     }
     if (keys.x) {
         camera.targetZoom += 0.02;
     }
-    camera.targetZoom = Math.max(0.8, Math.min(camera.targetZoom, 3.0)); // Clamp zoom
+    camera.targetZoom = Math.max(0.8, Math.min(camera.targetZoom, 3.0));
     camera.currentZoom += (camera.targetZoom - camera.currentZoom) * camera.zoomSpeed;
     
     
@@ -1359,7 +1354,7 @@ function update() {
         }
     }
 
-    // --- MODIFIED: Camera logic ---
+    // --- Camera ---
     let targetCamX = player.x + (player.width / 2) - (canvas.width / 2 / camera.currentZoom);
     let targetCamY = player.y + (player.height / 2) - (canvas.height / 2 / camera.currentZoom);
     camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
@@ -1533,7 +1528,12 @@ function updateMining() {
                 if (tileType === TILES.TORCH) {
                     setLight(miningState.tileX, miningState.tileY, 0);
                 } else if (isBlockSolid(tileType)) {
-                    updateSunlightColumn(miningState.tileX);
+                    // --- LAG FIX: Removed updateSunlightColumn() ---
+                    // Nudge neighbors to recalculate light
+                    const lightAbove = getLight(miningState.tileX, miningState.tileY - 1);
+                    if (lightAbove === AMBIENT_LIGHT_LEVEL) {
+                        setLight(miningState.tileX, miningState.tileY, AMBIENT_LIGHT_LEVEL);
+                    }
                     lightQueue.push([miningState.tileX + 1, miningState.tileY]);
                     lightQueue.push([miningState.tileX - 1, miningState.tileY]);
                     lightQueue.push([miningState.tileX, miningState.tileY + 1]);
@@ -1548,7 +1548,7 @@ function updateMining() {
 
 // --- Light Processing ---
 function processLightQueue() {
-    let limit = 1000;
+    let limit = 250; // --- OPTIMIZATION: Was 1000 ---
     while (lightQueue.length > 0 && limit > 0) {
         limit--;
         const [x, y] = lightQueue.shift();
@@ -1569,7 +1569,7 @@ function processLightQueue() {
     }
 }
 function processRemoveQueue() {
-    let limit = 1000;
+    let limit = 250; // --- OPTIMIZATION: Was 1000 ---
     while (removeQueue.length > 0 && limit > 0) {
         limit--;
         const [x, y, oldLevel] = removeQueue.shift();
@@ -1618,7 +1618,6 @@ function draw() {
     
     ctx.save();
     
-    // --- MODIFIED: Apply zoom ---
     ctx.scale(camera.currentZoom, camera.currentZoom);
     ctx.translate(Math.round(-camera.x), Math.round(-camera.y));
 
@@ -2036,8 +2035,6 @@ function init() {
     
     player.x = spawnPos.x;
     player.y = spawnPos.y;
-    
-    // MODIFIED: Set initial camera position based on zoom
     camera.x = player.x + (player.width / 2) - (canvas.width / 2 / camera.currentZoom);
     camera.y = player.y + (player.height / 2) - (canvas.height / 2 / camera.currentZoom);
     
