@@ -1,18 +1,18 @@
-// --- GAME MAKER: v10.11 (Procedural Texture Atlas) ---
+// --- GAME MAKER: v10.13 (Rare Item & External Link) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false; // Keep pixel art crisp
+ctx.imageSmoothingEnabled = false;
 
 // --- 2. World Configuration ---
 const TILE_SIZE = 20;
 const CHUNK_SIZE = 16;
-const SPRITE_SIZE = 16; // Size of one sprite on the atlas
+const SPRITE_SIZE = 16;
 
 const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
-    COAL: 14, FURNACE: 15, TORCH: 16,
+    COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
@@ -23,7 +23,8 @@ const TILE_NAMES = {
     [TILES.COPPER]: 'Copper Ore', [TILES.DIAMOND]: 'Diamond Ore', [TILES.COBALT]: 'Cobalt Ore',
     [TILES.PLATINUM]: 'Platinum Ore', [TILES.WOOD_LOG]: 'Wood Log', [TILES.LEAVES]: 'Leaves',
     [TILES.WOOD_PLANK]: 'Wood Plank', [TILES.CRAFTING_TABLE]: 'Crafting Table', [TILES.STICK]: 'Stick',
-    [TILES.COAL]: 'Coal', [TILES.FURNACE]: 'Furnace', [TILES.TORCH]: 'Torch',
+    [TILES.COAL]: 'Coal', [TILES.FURNACE]: 'Furnace', [TILES.TORCH]: 'Torch', [TILES.SLIME_GEL]: 'Slime Gel',
+    [TILES.USSR_BOOK]: 'Book: USSR',
     [TILES.WOOD_PICKAXE]: 'Wood Pickaxe', [TILES.STONE_PICKAXE]: 'Stone Pickaxe',
     [TILES.COPPER_PICKAXE]: 'Copper Pickaxe', [TILES.IRON_PICKAXE]: 'Iron Pickaxe',
     [TILES.DIAMOND_PICKAXE]: 'Diamond Pickaxe', [TILES.COBALT_PICKAXE]: 'Cobalt Pickaxe',
@@ -31,21 +32,20 @@ const TILE_NAMES = {
     [TILES.IRON_INGOT]: 'Iron Ingot', [TILES.DIAMOND_INGOT]: 'Diamond',
     [TILES.COBALT_INGOT]: 'Cobalt Ingot', [TILES.PLATINUM_INGOT]: 'Platinum Ingot'
 };
-// This is the color map for the generator
 const TILE_COLORS = {
     [TILES.AIR]: '#87CEEB', [TILES.GRASS]: '#34A853', [TILES.DIRT]: '#8B4513',
     [TILES.STONE]: '#808080', [TILES.IRON]: '#D2B48C', [TILES.COPPER]: '#B87333',
     [TILES.DIAMOND]: '#B9F2FF', [TILES.COBALT]: '#0047AB', [TILES.PLATINUM]: '#E5E4E2',
     [TILES.WOOD_LOG]: '#663300', [TILES.LEAVES]: '#006400', [TILES.WOOD_PLANK]: '#AF8F53',
     [TILES.CRAFTING_TABLE]: '#A07040', [TILES.STICK]: '#8B4513', [TILES.COAL]: '#2E2E2E',
-    [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500',
+    [TILES.FURNACE]: '#505050', [TILES.TORCH]: '#FFA500', [TILES.SLIME_GEL]: '#00BFFF',
+    [TILES.USSR_BOOK]: '#CC0000',
     [TILES.WOOD_PICKAXE]: '#AF8F53', [TILES.STONE_PICKAXE]: '#808080', [TILES.COPPER_PICKAXE]: '#B87333',
     [TILES.IRON_PICKAXE]: '#D2B4D2', [TILES.DIAMOND_PICKAXE]: '#B9F2FF', [TILES.COBALT_PICKAXE]: '#0047AB',
     [TILES.PLATINUM_PICKAXE]: '#E5E4E2', [TILES.COPPER_INGOT]: '#B87333', [TILES.IRON_INGOT]: '#D2B4D2',
     [TILES.DIAMOND_INGOT]: '#B9F2FF', [TILES.COBALT_INGOT]: '#0047AB', [TILES.PLATINUM_INGOT]: '#E5E4E2'
 };
 
-// Sprite map (using your desired order)
 const TILE_SPRITES = {
     [TILES.STONE]: [0, 0],
     [TILES.WOOD_PLANK]: [1, 0],
@@ -77,6 +77,8 @@ const TILE_SPRITES = {
     [TILES.DIAMOND_INGOT]: [2, 2],
     [TILES.COBALT_INGOT]: [3, 2],
     [TILES.PLATINUM_INGOT]: [4, 2],
+    [TILES.SLIME_GEL]: [5, 2],
+    [TILES.USSR_BOOK]: [6, 2], // NEW
 };
 
 const BLOCK_OPACITY = {
@@ -132,7 +134,7 @@ const TOOL_POWER = {
     [TILES.PLATINUM_PICKAXE]: 10,
 };
 
-// --- NEW: Procedural Texture Atlas Generator ---
+// --- Procedural Texture Atlas Generator ---
 function createTextureAtlas() {
     console.log("Generating procedural texture atlas...");
     const atlasCanvas = document.createElement('canvas');
@@ -140,7 +142,6 @@ function createTextureAtlas() {
     atlasCanvas.height = 256;
     const atlasCtx = atlasCanvas.getContext('2d');
 
-    // Helper for random noise
     const noise = (ctx, x, y, w, h, alpha) => {
         for (let i = 0; i < 50; i++) {
             ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, ${alpha})`;
@@ -148,7 +149,6 @@ function createTextureAtlas() {
         }
     };
 
-    // Loop over every sprite and draw it
     for (const tileId in TILE_SPRITES) {
         const [x, y] = TILE_SPRITES[tileId];
         const sx = x * SPRITE_SIZE;
@@ -158,27 +158,20 @@ function createTextureAtlas() {
         atlasCtx.fillStyle = color;
         atlasCtx.fillRect(sx, sy, SPRITE_SIZE, SPRITE_SIZE);
 
-        // Add procedural details
         switch (Number(tileId)) {
             case TILES.GRASS:
-                atlasCtx.fillStyle = '#8B4513'; // Dirt color
+                atlasCtx.fillStyle = '#8B4513';
                 atlasCtx.fillRect(sx, sy + 12, SPRITE_SIZE, 4);
                 noise(atlasCtx, sx, sy, 16, 12, 0.1);
                 break;
-            case TILES.DIRT:
-            case TILES.STONE:
-            case TILES.IRON:
-            case TILES.COPPER:
-            case TILES.DIAMOND:
-            case TILES.COBALT:
-            case TILES.PLATINUM:
-            case TILES.COAL:
+            case TILES.DIRT: case TILES.STONE: case TILES.IRON: case TILES.COPPER:
+            case TILES.DIAMOND: case TILES.COBALT: case TILES.PLATINUM: case TILES.COAL:
                 noise(atlasCtx, sx, sy, 16, 16, 0.2);
                 break;
             case TILES.WOOD_LOG:
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
-                atlasCtx.fillRect(sx, sy, 16, 16); // Darken
-                atlasCtx.fillStyle = '#A07040'; // Inner wood
+                atlasCtx.fillRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = '#A07040';
                 atlasCtx.fillRect(sx + 2, sy + 2, 12, 12);
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
                 for (let i = 0; i < 16; i += 4) atlasCtx.fillRect(sx + i, sy, 1, 16);
@@ -188,22 +181,22 @@ function createTextureAtlas() {
                 break;
             case TILES.CRAFTING_TABLE:
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.2)';
-                atlasCtx.fillRect(sx, sy, 16, 4); // Top edge
-                atlasCtx.fillRect(sx, sy, 4, 16); // Left edge
-                atlasCtx.fillRect(sx + 12, sy, 4, 16); // Right edge
-                atlasCtx.fillRect(sx + 4, sy + 8, 8, 4); // Hammer
+                atlasCtx.fillRect(sx, sy, 16, 4);
+                atlasCtx.fillRect(sx, sy, 4, 16);
+                atlasCtx.fillRect(sx + 12, sy, 4, 16);
+                atlasCtx.fillRect(sx + 4, sy + 8, 8, 4);
                 break;
             case TILES.FURNACE:
                 atlasCtx.fillStyle = 'rgba(0,0,0,0.4)';
                 atlasCtx.fillRect(sx, sy, 16, 16);
                 atlasCtx.fillStyle = '#FFA500';
-                atlasCtx.fillRect(sx + 4, sy + 6, 8, 6); // Firebox
+                atlasCtx.fillRect(sx + 4, sy + 6, 8, 6);
                 break;
             case TILES.TORCH:
-                atlasCtx.clearRect(sx, sy, 16, 16); // Make transparent
-                atlasCtx.fillStyle = '#8B4513'; // Stick
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = '#8B4513';
                 atlasCtx.fillRect(sx + 6, sy + 8, 4, 8);
-                atlasCtx.fillStyle = '#FFA500'; // Flame
+                atlasCtx.fillStyle = '#FFA500';
                 atlasCtx.fillRect(sx + 5, sy, 6, 6);
                 break;
             case TILES.STICK:
@@ -211,29 +204,40 @@ function createTextureAtlas() {
                 atlasCtx.fillStyle = TILE_COLORS[TILES.STICK];
                 atlasCtx.fillRect(sx + 6, sy + 2, 4, 12);
                 break;
-            case TILES.WOOD_PICKAXE:
-            case TILES.STONE_PICKAXE:
-            case TILES.COPPER_PICKAXE:
-            case TILES.IRON_PICKAXE:
-            case TILES.DIAMOND_PICKAXE:
-            case TILES.COBALT_PICKAXE:
+            case TILES.WOOD_PICKAXE: case TILES.STONE_PICKAXE: case TILES.COPPER_PICKAXE:
+            case TILES.IRON_PICKAXE: case TILES.DIAMOND_PICKAXE: case TILES.COBALT_PICKAXE:
             case TILES.PLATINUM_PICKAXE:
                 atlasCtx.clearRect(sx, sy, 16, 16);
-                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK]; // Handle
+                atlasCtx.fillStyle = TILE_COLORS[TILES.STICK];
                 atlasCtx.fillRect(sx + 6, sy + 2, 4, 12);
-                atlasCtx.fillStyle = color; // Head
+                atlasCtx.fillStyle = color;
                 atlasCtx.fillRect(sx + 2, sy + 2, 12, 4);
                 break;
-            case TILES.COPPER_INGOT:
-            case TILES.IRON_INGOT:
-            case TILES.DIAMOND_INGOT:
-            case TILES.COBALT_INGOT:
-            case TILES.PLATINUM_INGOT:
+            case TILES.COPPER_INGOT: case TILES.IRON_INGOT: case TILES.DIAMOND_INGOT:
+            case TILES.COBALT_INGOT: case TILES.PLATINUM_INGOT:
                 atlasCtx.clearRect(sx, sy, 16, 16);
                 atlasCtx.fillStyle = color;
                 atlasCtx.fillRect(sx + 3, sy + 4, 10, 8);
                 atlasCtx.fillStyle = 'rgba(255,255,255,0.3)';
                 atlasCtx.fillRect(sx + 3, sy + 4, 10, 2);
+                break;
+            case TILES.SLIME_GEL:
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = color;
+                atlasCtx.beginPath();
+                atlasCtx.moveTo(sx + 8, sy + 14);
+                atlasCtx.bezierCurveTo(sx, sy + 14, sx, sy + 6, sx + 8, sy + 6);
+                atlasCtx.bezierCurveTo(sx + 16, sy + 6, sx + 16, sy + 14, sx + 8, sy + 14);
+                atlasCtx.fill();
+                break;
+            case TILES.USSR_BOOK: // NEW
+                atlasCtx.clearRect(sx, sy, 16, 16);
+                atlasCtx.fillStyle = color; // Red
+                atlasCtx.fillRect(sx + 3, sy + 2, 10, 12);
+                atlasCtx.fillStyle = '#FFD700'; // Gold
+                // Simple star shape
+                atlasCtx.fillRect(sx + 7, sy + 4, 2, 8);
+                atlasCtx.fillRect(sx + 5, sy + 7, 6, 2);
                 break;
         }
     }
@@ -241,11 +245,8 @@ function createTextureAtlas() {
     console.log("Atlas generation complete.");
     return atlasCanvas;
 }
-// --- END of Texture Generator ---
 
-// --- Create the atlas on script load ---
 const textureAtlas = createTextureAtlas();
-
 const worldChunks = new Map();
 const lightChunks = new Map();
 
@@ -259,7 +260,11 @@ let player = {
     direction: 1,
     state: 'idle',
     animationFrame: 0,
-    animationTimer: 0
+    animationTimer: 0,
+    health: 100,
+    maxHealth: 100,
+    lastDamageTime: 0,
+    fallDistance: 0
 };
 let camera = { x: 0, y: 0 };
 let keys = { w: false, a: false, d: false, e: false };
@@ -281,6 +286,7 @@ const JUMP_STRENGTH = -8;
 const MOVE_SPEED = 3;
 const INTERACTION_RANGE = 4;
 const CAMERA_SMOOTH_FACTOR = 0.1;
+const INVINCIBILITY_TIME = 60;
 
 let hotbarSlots = new Array(9).fill(null);
 let inventorySlots = new Array(27).fill(null);
@@ -301,13 +307,15 @@ const COOK_TIME = 200;
 // --- Light Engine ---
 const MAX_LIGHT = 15;
 const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
-const MIN_GLOBAL_LIGHT = 1;
+const MIN_GLOBAL_LIGHT = 2;
 let lightQueue = [];
 let removeQueue = [];
 
-// --- Tooltip ---
-let hoveredItem = null;
+// --- Enemy System ---
+let enemies = [];
+let spawnPos = { x: 0, y: 0 };
 
+let hoveredItem = null;
 const simplex = new SimplexNoise();
 
 // --- 4. Recipe Databases ---
@@ -341,7 +349,6 @@ const CRAFTING_RECIPES = {
         output: {id: TILES.TORCH, count: 4}
     }
 };
-
 function addPickaxeRecipes() {
     const materials = [
         { id: TILES.WOOD_PLANK, pick: TILES.WOOD_PICKAXE },
@@ -365,7 +372,6 @@ function addPickaxeRecipes() {
     }
 }
 addPickaxeRecipes();
-
 const SMELT_RECIPES = {
     [TILES.COPPER_ORE]: TILES.COPPER_INGOT, [TILES.IRON_ORE]: TILES.IRON_INGOT,
     [TILES.DIAMOND]: TILES.DIAMOND_INGOT, [TILES.COBALT]: TILES.COBALT_INGOT,
@@ -381,21 +387,17 @@ const TERRAIN_HEIGHT_AMOUNT = 15;
 const BASE_HEIGHT = 30;
 const ORE_NOISE_SCALE = 10;
 const CAVE_NOISE_SCALE = 25;
-
 function getChunkKey(chunkX, chunkY) {
     return `${chunkX},${chunkY}`;
 }
-
 function generateChunk(chunkX, chunkY) {
     let chunk = new Array(CHUNK_SIZE).fill(0).map(() => new Array(CHUNK_SIZE).fill(TILES.AIR));
     let lightChunk = new Array(CHUNK_SIZE).fill(0).map(() => new Array(CHUNK_SIZE).fill(0));
     
-    // Pass 1: Terrain
     for (let x = 0; x < CHUNK_SIZE; x++) {
         const globalX = chunkX * CHUNK_SIZE + x;
         let heightNoise = simplex.noise2D(globalX / TERRAIN_HEIGHT_SCALE, 0);
         let surfaceY = Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
-
         for (let y = 0; y < CHUNK_SIZE; y++) {
             const globalY = chunkY * CHUNK_SIZE + y;
             if (globalY < surfaceY) chunk[y][x] = TILES.AIR;
@@ -417,8 +419,6 @@ function generateChunk(chunkX, chunkY) {
             }
         }
     }
-    
-    // Pass 2: Trees
     for (let x = 0; x < CHUNK_SIZE; x++) {
         for (let y = 0; y < CHUNK_SIZE; y++) {
             if (chunk[y][x] === TILES.GRASS && y > 0 && chunk[y-1][x] === TILES.AIR) {
@@ -428,17 +428,13 @@ function generateChunk(chunkX, chunkY) {
             }
         }
     }
-
-    // Pass 3: Sunlight
     for (let x = 0; x < CHUNK_SIZE; x++) {
         let sunBlocked = false;
         const globalX = chunkX * CHUNK_SIZE + x;
         const surfaceY = findSurfaceY(globalX);
-        
         for (let y = 0; y < CHUNK_SIZE; y++) {
             const globalY = chunkY * CHUNK_SIZE + y;
             const tileId = chunk[y][x];
-            
             if (globalY < surfaceY) {
                 if (isBlockSolid(tileId)) sunBlocked = true;
                 lightChunk[y][x] = sunBlocked ? 0 : AMBIENT_LIGHT_LEVEL;
@@ -446,7 +442,6 @@ function generateChunk(chunkX, chunkY) {
                 sunBlocked = true;
                 lightChunk[y][x] = 0;
             }
-            
             if (tileId === TILES.TORCH) {
                 lightChunk[y][x] = 14;
             } else if (isBlockSolid(tileId)) {
@@ -454,12 +449,10 @@ function generateChunk(chunkX, chunkY) {
             }
         }
     }
-
     const key = getChunkKey(chunkX, chunkY);
     worldChunks.set(key, chunk);
     lightChunks.set(key, lightChunk);
 }
-
 function getOrCreateChunk(chunkX, chunkY) {
     const key = getChunkKey(chunkX, chunkY);
     if (!worldChunks.has(key)) {
@@ -467,7 +460,6 @@ function getOrCreateChunk(chunkX, chunkY) {
     }
     return worldChunks.get(key);
 }
-
 function getLightChunk(chunkX, chunkY) {
     const key = getChunkKey(chunkX, chunkY);
     if (!lightChunks.has(key)) {
@@ -475,11 +467,9 @@ function getLightChunk(chunkX, chunkY) {
     }
     return lightChunks.get(key);
 }
-
 function correctMod(n, m) {
     return ((n % m) + m) % m;
 }
-
 function getTile(tileX, tileY) {
     const chunkX = Math.floor(tileX / CHUNK_SIZE);
     const chunkY = Math.floor(tileY / CHUNK_SIZE);
@@ -488,7 +478,6 @@ function getTile(tileX, tileY) {
     const localY = correctMod(tileY, CHUNK_SIZE);
     return chunk[localY][localX];
 }
-
 function setTile(tileX, tileY, tileId) {
     const chunkX = Math.floor(tileX / CHUNK_SIZE);
     const chunkY = Math.floor(tileY / CHUNK_SIZE);
@@ -497,7 +486,6 @@ function setTile(tileX, tileY, tileId) {
     const localY = correctMod(tileY, CHUNK_SIZE);
     chunk[localY][localX] = tileId;
 }
-
 function getLight(tileX, tileY) {
     const chunkX = Math.floor(tileX / CHUNK_SIZE);
     const chunkY = Math.floor(tileY / CHUNK_SIZE);
@@ -507,7 +495,6 @@ function getLight(tileX, tileY) {
     const localY = correctMod(tileY, CHUNK_SIZE);
     return chunk[localY][localX];
 }
-
 function setLight(tileX, tileY, lightLevel) {
     const chunkX = Math.floor(tileX / CHUNK_SIZE);
     const chunkY = Math.floor(tileY / CHUNK_SIZE);
@@ -526,12 +513,10 @@ function setLight(tileX, tileY, lightLevel) {
         removeQueue.push([tileX, tileY, oldLevel]);
     }
 }
-
 function findSurfaceY(globalX) {
     let heightNoise = simplex.noise2D(globalX / TERRAIN_HEIGHT_SCALE, 0);
     return Math.floor(BASE_HEIGHT + heightNoise * TERRAIN_HEIGHT_AMOUNT);
 }
-
 function generateTreeInChunk(chunk, x, y) {
     const trunkHeight = Math.floor(Math.random() * 3) + 4;
     
@@ -574,7 +559,6 @@ function generateTreeInChunk(chunk, x, y) {
         setLeaf(2, leafBaseY + 1);
     }
 }
-
 
 // --- 6. Inventory Helpers ---
 function addItemToInventory(itemStack) {
@@ -736,6 +720,12 @@ function resizeCanvas() {
 
 // --- 8. Interaction Logic ---
 function startMining(x, y) {
+    const enemy = getEnemyAt(x, y);
+    if (enemy) {
+        damageEnemy(enemy, 10);
+        return;
+    }
+
     const tileType = getTile(x, y);
     if (tileType === TILES.AIR) {
         stopMining();
@@ -813,6 +803,13 @@ function handleRightClick() {
     
     const block = getTile(mouse.tileX, mouse.tileY);
     const slot = hotbarSlots[selectedSlot];
+    
+    // --- NEW: Book logic ---
+    if (slot && slot.id === TILES.USSR_BOOK) {
+        console.log("Opening Wikipedia page...");
+        window.open('https://en.wikipedia.org/wiki/Soviet_Union', '_blank');
+        return; // Don't try to place the book
+    }
     
     if (block === TILES.CRAFTING_TABLE) {
         isCraftingOpen = true; isFurnaceOpen = false;
@@ -1094,7 +1091,12 @@ function updateFurnace() {
 
 // --- 10. Game Loop (Update Logic) ---
 function update() {
+    if (player.lastDamageTime > 0) {
+        player.lastDamageTime--;
+    }
+    
     if (!isCraftingOpen && !isFurnaceOpen) {
+        // --- Player Physics ---
         if (keys.a) player.vx = -MOVE_SPEED;
         else if (keys.d) player.vx = MOVE_SPEED;
         else player.vx = 0;
@@ -1104,27 +1106,44 @@ function update() {
         }
 
         player.vy += GRAVITY;
+        let oldY = player.y;
         let newY = player.y + player.vy;
+        
+        // Y-Collision
         if (player.vy > 0) {
             let tileX1 = toTileCoord(player.x);
             let tileX2 = toTileCoord(player.x + player.width);
             let tileY = toTileCoord(newY + player.height);
             if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
-                player.vy = 0; player.y = (tileY * TILE_SIZE) - player.height; player.isOnGround = true;
+                player.vy = 0;
+                player.y = (tileY * TILE_SIZE) - player.height;
+                if (!player.isOnGround) {
+                    updatePlayerFallDamage(player.y - oldY); // Landed
+                }
+                player.isOnGround = true;
+                player.fallDistance = 0;
             } else {
-                player.y = newY; player.isOnGround = false;
+                player.y = newY;
+                player.isOnGround = false;
             }
         } else if (player.vy < 0) {
             let tileX1 = toTileCoord(player.x);
             let tileX2 = toTileCoord(player.x + player.width);
             let tileY = toTileCoord(newY);
             if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
-                player.vy = 0; player.y = (tileY * TILE_SIZE) + TILE_SIZE;
+                player.vy = 0;
+                player.y = (tileY * TILE_SIZE) + TILE_SIZE;
             } else {
                 player.y = newY;
             }
         }
         
+        // Track fall distance
+        if (!player.isOnGround) {
+            player.fallDistance += (player.y - oldY);
+        }
+
+        // X-Collision
         let newX = player.x + player.vx;
         if (player.vx > 0) {
             let tileX = toTileCoord(newX + player.width);
@@ -1149,6 +1168,7 @@ function update() {
         player.vx = 0; player.vy = 0;
     }
 
+    // --- Player Animation ---
     if (!player.isOnGround) {
         player.state = 'jumping';
     } else if (keys.a || keys.d) {
@@ -1171,10 +1191,214 @@ function update() {
         player.animationFrame = 0;
     }
     
+    // --- UI & Game States ---
     if (isFurnaceOpen) {
         updateFurnace();
     }
+    
+    updateMining();
+    processLightQueue();
+    processRemoveQueue();
+    updateEnemies();
+    
+    hoveredItem = null;
+    if (isCraftingOpen || isFurnaceOpen) {
+        for (const key in slotCoords) {
+            const { x, y } = slotCoords[key];
+            if (mouse.x > x && mouse.x < x + SLOT_SIZE && mouse.y > y && mouse.y < y + SLOT_SIZE) {
+                const [arrayName, indexStr] = key.split('-');
+                const index = parseInt(indexStr);
+                if (arrayName === 'inv') hoveredItem = inventorySlots[index];
+                else if (arrayName === 'hotbar') hoveredItem = hotbarSlots[index];
+                else if (arrayName === 'crafting') hoveredItem = craftingGrid[index];
+                else if (arrayName === 'furnaceIn') hoveredItem = furnaceInput;
+                else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
+                else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
+                else if (arrayName === 'craftingOut') hoveredItem = craftingOutput;
+                break;
+            }
+        }
+    }
 
+    // --- Chunk Loading ---
+    const playerChunkX = Math.floor(toTileCoord(player.x + player.width/2) / CHUNK_SIZE);
+    const playerChunkY = Math.floor(toTileCoord(player.y + player.height/2) / CHUNK_SIZE);
+    const renderDist = 2;
+    for (let cy = playerChunkY - renderDist; cy <= playerChunkY + renderDist; cy++) {
+        for (let cx = playerChunkX - renderDist; cx <= playerChunkX + renderDist; cx++) {
+            getOrCreateChunk(cx, cy);
+        }
+    }
+
+    // --- Camera ---
+    let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
+    let targetCamY = player.y - (canvas.height / 2);
+    camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
+    camera.y += (targetCamY - camera.y) * CAMERA_SMOOTH_FACTOR;
+    if (Math.abs(targetCamX - camera.x) < 0.1) camera.x = targetCamX;
+    if (Math.abs(targetCamY - camera.y) < 0.1) camera.y = targetCamY;
+}
+
+// --- NEW: Player Health & Damage ---
+function takeDamage(amount) {
+    if (player.lastDamageTime > 0) return; // Invincible
+    
+    player.health -= amount;
+    player.lastDamageTime = INVINCIBILITY_TIME;
+    console.log(`Player took ${amount} damage. Health: ${player.health}`);
+    
+    if (player.health <= 0) {
+        player.health = 0;
+        console.log("Player died!");
+        // Respawn
+        player.x = spawnPos.x;
+        player.y = spawnPos.y;
+        player.health = player.maxHealth;
+        player.vx = 0;
+        player.vy = 0;
+        player.fallDistance = 0;
+    }
+}
+
+function updatePlayerFallDamage(pixelsFallen) {
+    if (pixelsFallen <= 0) return;
+    
+    // Convert pixels to "blocks" fallen
+    const blocksFallen = pixelsFallen / TILE_SIZE;
+    if (blocksFallen > 4) { // Safe to fall 4 blocks
+        const damage = Math.floor((blocksFallen - 4) * 5); // 5 damage per block
+        if (damage > 0) {
+            takeDamage(damage);
+        }
+    }
+}
+
+// --- NEW: Enemy Functions ---
+function spawnEnemy(x, y) {
+    const enemy = {
+        x: x, y: y,
+        width: TILE_SIZE * 0.9,
+        height: TILE_SIZE * 0.9,
+        vx: 0, vy: 0,
+        isOnGround: false,
+        health: 20,
+        maxHealth: 20,
+        aiTimer: 0,
+        lastDamageTime: 0
+    };
+    enemies.push(enemy);
+}
+
+function getEnemyAt(x, y) {
+    // Check pixel coordinates
+    const px = x * TILE_SIZE + TILE_SIZE / 2;
+    const py = y * TILE_SIZE + TILE_SIZE / 2;
+    
+    for (const enemy of enemies) {
+        if (px > enemy.x && px < enemy.x + enemy.width &&
+            py > enemy.y && py < enemy.y + enemy.height) {
+            return enemy;
+        }
+    }
+    return null;
+}
+
+function damageEnemy(enemy, amount) {
+    if (enemy.lastDamageTime > 0) return; // i-frames
+    
+    enemy.health -= amount;
+    enemy.lastDamageTime = 30; // 0.5 sec i-frames
+    enemy.vy = -3; // Knockback
+    enemy.vx = (enemy.x - player.x > 0 ? 1 : -1) * 2;
+    
+    if (enemy.health <= 0) {
+        // Drop loot
+        const dropAmount = Math.floor(Math.random() * 3) + 1; // 1-3 gel
+        addItemToInventory({ id: TILES.SLIME_GEL, count: dropAmount });
+        
+        // --- NEW: RARE DROP ---
+        if (Math.random() < 0.00005) { // 0.005%
+            console.log("!!! RARE DROP !!!");
+            addItemToInventory({ id: TILES.USSR_BOOK, count: 1 });
+        }
+    }
+}
+
+function updateEnemies() {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        
+        if (enemy.health <= 0) {
+            enemies.splice(i, 1);
+            continue;
+        }
+        
+        if (enemy.lastDamageTime > 0) {
+            enemy.lastDamageTime--;
+        }
+
+        // --- Enemy Physics (Simplified) ---
+        enemy.vy += GRAVITY;
+        let newY = enemy.y + enemy.vy;
+        
+        // Y-Collision
+        let tileX1 = toTileCoord(enemy.x);
+        let tileX2 = toTileCoord(enemy.x + enemy.width);
+        let tileY = toTileCoord(newY + enemy.height);
+        
+        if (isTileSolid(tileX1, tileY) || isTileSolid(tileX2, tileY)) {
+            enemy.vy = 0;
+            enemy.y = (tileY * TILE_SIZE) - enemy.height;
+            enemy.isOnGround = true;
+        } else {
+            enemy.y = newY;
+            enemy.isOnGround = false;
+        }
+        
+        // X-Collision (simplified)
+        let newX = enemy.x + enemy.vx;
+        let tileX = toTileCoord(newX + (enemy.vx > 0 ? enemy.width : 0));
+        let tileY1 = toTileCoord(enemy.y);
+        let tileY2 = toTileCoord(enemy.y + enemy.height - 1);
+        if (isTileSolid(tileX, tileY1) || isTileSolid(tileX, tileY2)) {
+            enemy.vx = 0;
+        } else {
+            enemy.x += enemy.vx;
+        }
+        
+        // Slow down
+        if (enemy.isOnGround) {
+            enemy.vx *= 0.8;
+        }
+        
+        // --- Slime AI ---
+        enemy.aiTimer--;
+        if (enemy.aiTimer <= 0 && enemy.isOnGround) {
+            const dist = player.x - enemy.x;
+            if (Math.abs(dist) < TILE_SIZE * 10) { // If player is close
+                enemy.vy = JUMP_STRENGTH / 1.5; // Short jump
+                enemy.vx = (dist > 0 ? 1 : -1) * 2; // Move towards player
+                enemy.isOnGround = false;
+            }
+            enemy.aiTimer = Math.random() * 100 + 80; // 1.3 to 3 sec
+        }
+        
+        // --- Check Player Collision ---
+        if (player.lastDamageTime === 0 &&
+            player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y)
+        {
+            takeDamage(5); // Slime deals 5 damage
+            // Knockback player
+            player.vy = -4;
+            player.vx = (player.x - enemy.x > 0 ? 1 : -1) * 4;
+        }
+    }
+}
+
+function updateMining() {
     if (miningState.isMining) {
         const playerTileX = toTileCoord(player.x + player.width / 2);
         const playerTileY = toTileCoord(player.y + player.height / 2);
@@ -1204,47 +1428,9 @@ function update() {
             }
         }
     }
-    
-    processLightQueue();
-    processRemoveQueue();
-    
-    hoveredItem = null;
-    if (isCraftingOpen || isFurnaceOpen) {
-        for (const key in slotCoords) {
-            const { x, y } = slotCoords[key];
-            if (mouse.x > x && mouse.x < x + SLOT_SIZE && mouse.y > y && mouse.y < y + SLOT_SIZE) {
-                const [arrayName, indexStr] = key.split('-');
-                const index = parseInt(indexStr);
-                if (arrayName === 'inv') hoveredItem = inventorySlots[index];
-                else if (arrayName === 'hotbar') hoveredItem = hotbarSlots[index];
-                else if (arrayName === 'crafting') hoveredItem = craftingGrid[index];
-                else if (arrayName === 'furnaceIn') hoveredItem = furnaceInput;
-                else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
-                else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
-                else if (arrayName === 'craftingOut') hoveredItem = craftingOutput;
-                break;
-            }
-        }
-    }
-
-    const playerChunkX = Math.floor(toTileCoord(player.x + player.width/2) / CHUNK_SIZE);
-    const playerChunkY = Math.floor(toTileCoord(player.y + player.height/2) / CHUNK_SIZE);
-    const renderDist = 2;
-    for (let cy = playerChunkY - renderDist; cy <= playerChunkY + renderDist; cy++) {
-        for (let cx = playerChunkX - renderDist; cx <= playerChunkX + renderDist; cx++) {
-            getOrCreateChunk(cx, cy);
-        }
-    }
-
-    let targetCamX = player.x - (canvas.width / 2) + (player.width / 2);
-    let targetCamY = player.y - (canvas.height / 2);
-    camera.x += (targetCamX - camera.x) * CAMERA_SMOOTH_FACTOR;
-    camera.y += (targetCamY - camera.y) * CAMERA_SMOOTH_FACTOR;
-    if (Math.abs(targetCamX - camera.x) < 0.1) camera.x = targetCamX;
-    if (Math.abs(targetCamY - camera.y) < 0.1) camera.y = targetCamY;
 }
 
-// --- Light Processing Functions ---
+// --- Light Processing ---
 function processLightQueue() {
     let limit = 1000;
     while (lightQueue.length > 0 && limit > 0) {
@@ -1266,17 +1452,14 @@ function processLightQueue() {
         }
     }
 }
-
 function processRemoveQueue() {
     let limit = 1000;
     while (removeQueue.length > 0 && limit > 0) {
         limit--;
         const [x, y, oldLevel] = removeQueue.shift();
-
         const neighbors = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
         for (const [nx, ny] of neighbors) {
             const neighborLevel = getLight(nx, ny);
-            
             if (neighborLevel > 0) {
                 if (neighborLevel < oldLevel) {
                     setLight(nx, ny, 0);
@@ -1288,21 +1471,16 @@ function processRemoveQueue() {
     }
 }
 
-/**
- * --- MODIFIED: This function is for PHYSICS ---
- */
+// --- Physics Helper ---
 function isTileSolid(tileX, tileY) {
     const tileType = getTile(tileX, tileY);
-    
-    // Air, trees, and torches are not solid for physics
     if (tileType === TILES.AIR || 
         tileType === TILES.WOOD_LOG || 
         tileType === TILES.LEAVES ||
         tileType === TILES.TORCH) {
         return false;
     }
-    
-    return true; // All other blocks are solid
+    return true;
 }
 
 function toTileCoord(pixelCoord) {
@@ -1325,6 +1503,7 @@ function draw() {
     ctx.save();
     ctx.translate(Math.round(-camera.x), Math.round(-camera.y));
 
+    // --- Draw World ---
     const startTileX = toTileCoord(camera.x);
     const endTileX = startTileX + toTileCoord(canvas.width) + 2;
     const startTileY = toTileCoord(camera.y);
@@ -1357,7 +1536,7 @@ function draw() {
             if (spriteCoords) {
                 ctx.globalAlpha = 1.0;
                 ctx.drawImage(
-                    textureAtlas, // Use generated atlas
+                    textureAtlas,
                     spriteCoords[0] * SPRITE_SIZE,
                     spriteCoords[1] * SPRITE_SIZE,
                     SPRITE_SIZE, SPRITE_SIZE,
@@ -1383,8 +1562,11 @@ function draw() {
         }
     }
 
+    // --- Draw Entities ---
     drawPlayer();
+    drawEnemies();
     
+    // --- Draw Mouse & Mining ---
     const playerTileX = toTileCoord(player.x + player.width / 2);
     const playerTileY = toTileCoord(player.y + player.height / 2);
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
@@ -1416,6 +1598,9 @@ function draw() {
     if (!isCraftingOpen && !isFurnaceOpen) {
         drawHotbar();
     }
+    
+    drawHealthBar();
+    
     ctx.fillStyle = '#FFFFFF';
     ctx.font = '16px Arial';
     ctx.textAlign = "right";
@@ -1423,6 +1608,7 @@ function draw() {
     const tY = toTileCoord(player.y + player.height / 2);
     ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
     ctx.textAlign = "left";
+    
     if (isCraftingOpen) {
         drawCraftingUI();
     } else if (isFurnaceOpen) {
@@ -1455,6 +1641,10 @@ function drawPlayer() {
     ctx.save();
     ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
     ctx.scale(player.direction, 1);
+    
+    if (player.lastDamageTime > 0 && Math.floor(player.lastDamageTime / 4) % 2 === 0) {
+        ctx.globalAlpha = 0.5;
+    }
 
     const skin = '#E0A07E';
     const shirt = '#4080A0';
@@ -1500,12 +1690,55 @@ function drawPlayer() {
     ctx.restore();
 }
 
+function drawEnemies() {
+    for (const enemy of enemies) {
+        ctx.save();
+        if (enemy.lastDamageTime > 0 && Math.floor(enemy.lastDamageTime / 4) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        }
+        
+        ctx.fillStyle = '#00FF00';
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(enemy.x + enemy.width * 0.2, enemy.y + enemy.height * 0.3, 2, 2);
+        ctx.fillRect(enemy.x + enemy.width * 0.7, enemy.y + enemy.height * 0.3, 2, 2);
+        
+        ctx.restore();
+    }
+}
+
+function drawHealthBar() {
+    const numHearts = player.maxHealth / 10;
+    const healthPerHeart = player.maxHealth / numHearts;
+    const currentHeart = player.health / healthPerHeart;
+
+    const heartSize = 20;
+    const startX = canvas.width - (numHearts * (heartSize + 4)) - 10;
+    const startY = 40;
+
+    ctx.font = '16px Arial';
+    ctx.fillStyle = '#FF0000'; // Red for hearts
+
+    for (let i = 0; i < numHearts; i++) {
+        let x = startX + i * (heartSize + 4);
+        let heartFill = '♥';
+        if (currentHeart <= i) {
+            ctx.fillStyle = '#555555';
+        } else {
+            ctx.fillStyle = '#FF0000';
+        }
+        ctx.fillText(heartFill, x, startY + heartSize);
+    }
+}
+
+
 function drawSprite(item, x, y, size) {
     if (!item) return;
     const spriteCoords = TILE_SPRITES[item.id];
     if (spriteCoords) {
         ctx.drawImage(
-            textureAtlas, // Use generated atlas
+            textureAtlas,
             spriteCoords[0] * SPRITE_SIZE,
             spriteCoords[1] * SPRITE_SIZE,
             SPRITE_SIZE, SPRITE_SIZE,
@@ -1675,8 +1908,12 @@ function init() {
     console.log("Initializing game...");
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
-    player.x = spawnX * TILE_SIZE;
-    player.y = spawnY * TILE_SIZE - player.height;
+    
+    spawnPos.x = spawnX * TILE_SIZE;
+    spawnPos.y = spawnY * TILE_SIZE - player.height;
+    
+    player.x = spawnPos.x;
+    player.y = spawnPos.y;
     camera.x = player.x - (canvas.width / 2) + (player.width / 2);
     camera.y = player.y - (canvas.height / 2);
     
@@ -1709,10 +1946,11 @@ function init() {
     
     setupInputListeners();
     resizeCanvas();
+    
+    spawnEnemy(player.x + TILE_SIZE * 5, player.y);
+    
     gameLoop();
     console.log("Game started!");
 }
 
-// --- REMOVED all atlas.png loading ---
-// --- Start the game immediately ---
 init();
