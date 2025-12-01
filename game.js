@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.15 (Lag Fix & Lighter Shadows) ---
+// --- GAME MAKER: v10.16 (2x2 Inventory, Armor Slots, UI Overhaul) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,15 +13,13 @@ const TILES = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, IRON: 4, COPPER: 5, DIAMOND: 6, COBALT: 7,
     PLATINUM: 8, WOOD_LOG: 9, LEAVES: 10, WOOD_PLANK: 11, CRAFTING_TABLE: 12, STICK: 13,
     COAL: 14, FURNACE: 15, TORCH: 16, SLIME_GEL: 17, USSR_BOOK: 18,
-    // Pickaxes
     WOOD_PICKAXE: 100, STONE_PICKAXE: 101, COPPER_PICKAXE: 102, IRON_PICKAXE: 103,
     DIAMOND_PICKAXE: 104, COBALT_PICKAXE: 105, PLATINUM_PICKAXE: 106,
-    // Ingots
     COPPER_INGOT: 107, IRON_INGOT: 108, DIAMOND_INGOT: 109, COBALT_INGOT: 110,
     PLATINUM_INGOT: 111,
-    // Swords
     WOOD_SWORD: 1000, STONE_SWORD: 1001, COPPER_SWORD: 1002, IRON_SWORD: 1003,
     DIAMOND_SWORD: 1004, COBALT_SWORD: 1005, PLATINUM_SWORD: 1006
+    // Armor items will be added later (e.g., IRON_HELMET: 2000)
 };
 const TILE_NAMES = {
     [TILES.GRASS]: 'Grass', [TILES.DIRT]: 'Dirt', [TILES.STONE]: 'Stone', [TILES.IRON]: 'Iron Ore',
@@ -349,10 +347,20 @@ let hotbarSlots = new Array(9).fill(null);
 let inventorySlots = new Array(27).fill(null);
 let selectedSlot = 0;
 
-let isCraftingOpen = false;
+// --- NEW: UI States & Grids ---
+let isInventoryOpen = false;
+let isCraftingTableOpen = false;
 let isFurnaceOpen = false;
-let craftingGrid = new Array(9).fill(null);
-let craftingOutput = null;
+
+let playerCraftingGrid = new Array(4).fill(null);
+let playerCraftingOutput = null;
+let tableCraftingGrid = new Array(9).fill(null);
+let tableCraftingOutput = null;
+
+let helmetSlot = null;
+let chestplateSlot = null;
+let leggingsSlot = null;
+// ---
 
 let furnaceInput = null;
 let furnaceFuel = null;
@@ -364,7 +372,7 @@ const COOK_TIME = 200;
 // --- Light Engine ---
 const MAX_LIGHT = 15;
 const AMBIENT_LIGHT_LEVEL = MAX_LIGHT;
-const MIN_GLOBAL_LIGHT = 3; // Lighter shadows
+const MIN_GLOBAL_LIGHT = 3;
 let lightQueue = [];
 let removeQueue = [];
 
@@ -702,10 +710,12 @@ function removeBlockFromInventory(slotArray, slotIndex) {
 // --- 7. Input Handlers ---
 function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
-        if (isCraftingOpen || isFurnaceOpen) {
+        // --- MODIFIED: Check all UI states ---
+        if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
              if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') {
                 if (!keys.e) {
-                    isCraftingOpen = false;
+                    isInventoryOpen = false;
+                    isCraftingTableOpen = false;
                     isFurnaceOpen = false;
                     dropHeldItem();
                 }
@@ -718,7 +728,9 @@ function setupInputListeners() {
         if (e.key === 'd' || e.key === 'D') keys.d = true;
         if (e.key === 'e' || e.key === 'E') {
             if (!keys.e) {
-                isCraftingOpen = true;
+                // --- MODIFIED: 'E' opens Player Inventory ---
+                isInventoryOpen = true;
+                isCraftingTableOpen = false;
                 isFurnaceOpen = false;
             }
             keys.e = true;
@@ -760,7 +772,7 @@ function setupInputListeners() {
 
         if (mouse.tileX !== oldTileX || mouse.tileY !== oldTileY) {
             stopMining();
-            if (mouse.isDown && !isCraftingOpen && !isFurnaceOpen) {
+            if (mouse.isDown && !isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
                 const didAttack = tryAttack(mouse.tileX, mouse.tileY);
                 if (!didAttack) {
                     startMining(mouse.tileX, mouse.tileY);
@@ -774,8 +786,11 @@ function setupInputListeners() {
         mouse.isDown = true;
         const isShiftClick = e.shiftKey;
         
-        if (isCraftingOpen) {
-            handleInventoryClick(e.button, 'crafting', isShiftClick);
+        // --- MODIFIED: Check all UI states ---
+        if (isInventoryOpen) {
+            handleInventoryClick(e.button, 'inventory', isShiftClick);
+        } else if (isCraftingTableOpen) {
+            handleInventoryClick(e.button, 'craftingTable', isShiftClick);
         } else if (isFurnaceOpen) {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
@@ -793,7 +808,7 @@ function setupInputListeners() {
     
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('wheel', (e) => {
-        if (isCraftingOpen || isFurnaceOpen) return;
+        if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) return;
         if (e.deltaY > 0) {
             selectedSlot++;
             if (selectedSlot > 8) selectedSlot = 0;
@@ -849,7 +864,6 @@ function startMining(x, y) {
     const heldSlot = hotbarSlots[selectedSlot];
     const toolTier = heldSlot ? (TOOL_TIER[heldSlot.id] ?? 0) : 0;
 
-    // Check if item is a sword
     const isSword = heldSlot && heldSlot.id >= 1000;
     
     if (toolTier < requiredTier || isSword) {
@@ -874,35 +888,7 @@ function stopMining() {
     miningState.progress = 0;
 }
 
-
-function updateSunlightColumn(tileX) {
-    let sunBlocked = false;
-    let surfaceY = findSurfaceY(tileX);
-    
-    for (let y = 0; y < 100; y++) {
-        const tileId = getTile(tileX, y);
-        let light = 0;
-        
-        if (!sunBlocked) {
-            if (y < surfaceY) {
-                if (isBlockSolid(tileId)) {
-                    sunBlocked = true;
-                } else {
-                    light = AMBIENT_LIGHT_LEVEL;
-                }
-            } else {
-                sunBlocked = true;
-            }
-        }
-        
-        if (tileId === TILES.TORCH) {
-            light = 14;
-            lightQueue.push([tileX, y]);
-        }
-        
-        setLight(tileX, y, light);
-    }
-}
+// --- REMOVED: updateSunlightColumn() ---
 
 function handleRightClick() {
     const playerTileX = toTileCoord(player.x + player.width / 2);
@@ -919,10 +905,15 @@ function handleRightClick() {
         return;
     }
     
+    // --- MODIFIED: Check for UI opens ---
     if (block === TILES.CRAFTING_TABLE) {
-        isCraftingOpen = true; isFurnaceOpen = false;
+        isCraftingTableOpen = true;
+        isInventoryOpen = false;
+        isFurnaceOpen = false;
     } else if (block === TILES.FURNACE) {
-        isCraftingOpen = false; isFurnaceOpen = true;
+        isFurnaceOpen = true;
+        isInventoryOpen = false;
+        isCraftingTableOpen = false;
     } else if (block === TILES.AIR || (slot && slot.id === TILES.TORCH && !isBlockSolid(block))) {
         placeBlock();
     }
@@ -962,8 +953,11 @@ function placeBlock() {
             setLight(mouse.tileX, mouse.tileY, 14);
         } else if (isBlockSolid(slot.id)) {
             setLight(mouse.tileX, mouse.tileY, 0);
-            // --- LAG FIX: Removed updateSunlightColumn() ---
-            // The setLight(0) call will trigger the removeQueue, which is correct.
+            // Nudge neighbors to recalculate sunlight
+            const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
+            if (lightAbove === AMBIENT_LIGHT_LEVEL) {
+                 lightQueue.push([mouse.tileX, mouse.tileY - 1]);
+            }
         }
     }
 }
@@ -984,24 +978,35 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             
             if (arrayName === 'inv') { slotArray = inventorySlots; setter = (item) => inventorySlots[index] = item; }
             else if (arrayName === 'hotbar') { slotArray = hotbarSlots; setter = (item) => hotbarSlots[index] = item; }
-            else if (arrayName === 'crafting') { slotArray = craftingGrid; setter = (item) => craftingGrid[index] = item; }
-            else if (arrayName === 'furnaceIn') { slotArray = [furnaceInput]; setter = (item) => furnaceInput = item; }
-            else if (arrayName === 'furnaceFuel') { slotArray = [furnaceFuel]; setter = (item) => furnaceFuel = item; }
-            else if (arrayName === 'craftingOut') {
-                handleOutputClick(craftingOutput, 'crafting', (item) => craftingOutput = item, isShiftClicking);
-                return;
-            } else if (arrayName === 'furnaceOut') {
-                handleOutputClick(furnaceOutput, 'furnace', (item) => furnaceOutput = item, isShiftClicking);
-                return;
+            
+            // --- MODIFIED: Check which UI is open ---
+            else if (uiType === 'inventory') {
+                if (arrayName === 'pCraft') { slotArray = playerCraftingGrid; setter = (item) => playerCraftingGrid[index] = item; }
+                else if (arrayName === 'pCraftOut') { handleOutputClick(playerCraftingOutput, 'playerCrafting', (item) => playerCraftingOutput = item, isShiftClicking); return; }
+                else if (arrayName === 'armor') {
+                    if (index === 0) { slotArray = [helmetSlot]; setter = (item) => helmetSlot = item; }
+                    else if (index === 1) { slotArray = [chestplateSlot]; setter = (item) => chestplateSlot = item; }
+                    else if (index === 2) { slotArray = [leggingsSlot]; setter = (item) => leggingsSlot = item; }
+                }
+            }
+            else if (uiType === 'craftingTable') {
+                if (arrayName === 'tCraft') { slotArray = tableCraftingGrid; setter = (item) => tableCraftingGrid[index] = item; }
+                else if (arrayName === 'tCraftOut') { handleOutputClick(tableCraftingOutput, 'tableCrafting', (item) => tableCraftingOutput = item, isShiftClicking); return; }
+            }
+            else if (uiType === 'furnace') {
+                if (arrayName === 'furnaceIn') { slotArray = [furnaceInput]; setter = (item) => furnaceInput = item; }
+                else if (arrayName === 'furnaceFuel') { slotArray = [furnaceFuel]; setter = (item) => furnaceFuel = item; }
+                else if (arrayName === 'furnaceOut') { handleOutputClick(furnaceOutput, 'furnace', (item) => furnaceOutput = item, isShiftClicking); return; }
             }
 
-            if (isShiftClicking && arrayName !== 'craftingOut' && arrayName !== 'furnaceOut') {
+            if (isShiftClicking && slotArray) {
                 quickMoveItem(slotArray, index, arrayName, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
             
-            if (uiType === 'crafting') checkCrafting();
+            if (uiType === 'inventory') checkPlayerCrafting();
+            else if (uiType === 'craftingTable') checkTableCrafting();
             return;
         }
     }
@@ -1011,7 +1016,9 @@ function quickMoveItem(slotArray, index, fromArea, setter) {
     let itemStack = slotArray[index];
     if (!itemStack) return;
     let remainingStack = null;
-    if (fromArea === 'crafting' || fromArea === 'furnaceIn' || fromArea === 'furnaceFuel' || fromArea === 'furnaceOut') {
+    
+    // --- MODIFIED: Check fromArea ---
+    if (fromArea === 'pCraft' || fromArea === 'tCraft' || fromArea === 'furnaceIn' || fromArea === 'furnaceFuel' || fromArea === 'furnaceOut' || fromArea === 'armor') {
         remainingStack = addItemToInventory(itemStack);
     } else if (fromArea === 'inv' || fromArea === 'hotbar') {
         if (isFurnaceOpen) {
@@ -1019,9 +1026,11 @@ function quickMoveItem(slotArray, index, fromArea, setter) {
             else if (FUEL_TIMES[itemStack.id] && !furnaceFuel) furnaceFuel = itemStack;
             else remainingStack = addItemToInventory(itemStack);
         } else {
+            // Can't quick-move to armor slots yet, so just send to inventory
             remainingStack = addItemToInventory(itemStack);
         }
     }
+    
     if (!remainingStack) setter(null);
     else setter(remainingStack);
 }
@@ -1080,23 +1089,34 @@ function handleOutputClick(outputSlot, uiType, setter, isShiftClicking = false) 
 }
 
 function consumeCraftingMaterials(uiType, setter) {
-    if (uiType === 'crafting') {
+    // --- MODIFIED: Check which grid to consume from ---
+    if (uiType === 'playerCrafting') {
         setter(null);
-        for (let i = 0; i < craftingGrid.length; i++) {
-            if (craftingGrid[i]) {
-                craftingGrid[i].count--;
-                if (craftingGrid[i].count <= 0) craftingGrid[i] = null;
+        for (let i = 0; i < playerCraftingGrid.length; i++) {
+            if (playerCraftingGrid[i]) {
+                playerCraftingGrid[i].count--;
+                if (playerCraftingGrid[i].count <= 0) playerCraftingGrid[i] = null;
             }
         }
-        checkCrafting();
+        checkPlayerCrafting();
+    } else if (uiType === 'tableCrafting') {
+        setter(null);
+        for (let i = 0; i < tableCraftingGrid.length; i++) {
+            if (tableCraftingGrid[i]) {
+                tableCraftingGrid[i].count--;
+                if (tableCraftingGrid[i].count <= 0) tableCraftingGrid[i] = null;
+            }
+        }
+        checkTableCrafting();
     } else if (uiType === 'furnace') {
         setter(null);
     }
 }
 
-function checkCrafting() {
-    craftingOutput = null;
-    const gridIds = craftingGrid.map(slot => slot ? slot.id : null);
+// --- NEW: checkPlayerCrafting (2x2 grid) ---
+function checkPlayerCrafting() {
+    playerCraftingOutput = null;
+    const gridIds = playerCraftingGrid.map(slot => slot ? slot.id : null);
     const gridIsEmpty = gridIds.every(id => id === null);
     if (gridIsEmpty) return;
 
@@ -1122,7 +1142,80 @@ function checkCrafting() {
                 }
             }
             if (match) {
-                craftingOutput = { ...recipe.output };
+                playerCraftingOutput = { ...recipe.output };
+                return;
+            }
+        } else if (recipe.type === 'shaped') {
+            const pattern = recipe.pattern;
+            const pHeight = pattern.length;
+            const pWidth = pattern[0].length;
+            
+            // --- Only check recipes that fit in a 2x2 grid ---
+            if (pHeight > 2 || pWidth > 2) continue;
+            
+            for (let startY = 0; startY <= 2 - pHeight; startY++) {
+                for (let startX = 0; startX <= 2 - pWidth; startX++) {
+                    let match = true;
+                    for (let gridY = 0; gridY < 2; gridY++) {
+                        for (let gridX = 0; gridX < 2; gridX++) {
+                            const gridIndex = gridY * 2 + gridX;
+                            const gridId = gridIds[gridIndex];
+                            
+                            const patternX = gridX - startX;
+                            const patternY = gridY - startY;
+                            
+                            let patternId = null;
+                            if (patternX >= 0 && patternX < pWidth && patternY >= 0 && patternY < pHeight) {
+                                patternId = pattern[patternY][patternX];
+                            }
+                            
+                            if (gridId !== patternId) {
+                                match = false;
+                                break;
+                            }
+                        }
+                        if (!match) break;
+                    }
+                    if (match) {
+                        playerCraftingOutput = { ...recipe.output };
+                        return;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- RENAMED: from checkCrafting to checkTableCrafting (3x3 grid) ---
+function checkTableCrafting() {
+    tableCraftingOutput = null;
+    const gridIds = tableCraftingGrid.map(slot => slot ? slot.id : null);
+    const gridIsEmpty = gridIds.every(id => id === null);
+    if (gridIsEmpty) return;
+
+    for (const key in CRAFTING_RECIPES) {
+        const recipe = CRAFTING_RECIPES[key];
+        
+        if (recipe.type === 'shapeless') {
+            let gridItems = gridIds.filter(id => id !== null);
+            let recipeItems = [];
+            recipe.input.forEach(item => {
+                for(let i=0; i<item.count; i++) {
+                    recipeItems.push(item.id);
+                }
+            });
+            let match = true;
+            if (gridItems.length !== recipeItems.length) {
+                match = false;
+            } else {
+                let gridItemsSorted = [...gridItems].sort().join(',');
+                let recipeItemsSorted = [...recipeItems].sort().join(',');
+                if (gridItemsSorted !== recipeItemsSorted) {
+                    match = false;
+                }
+            }
+            if (match) {
+                tableCraftingOutput = { ...recipe.output };
                 return;
             }
         } else if (recipe.type === 'shaped') {
@@ -1132,7 +1225,6 @@ function checkCrafting() {
             
             for (let startY = 0; startY <= 3 - pHeight; startY++) {
                 for (let startX = 0; startX <= 3 - pWidth; startX++) {
-                    
                     let match = true;
                     for (let gridY = 0; gridY < 3; gridY++) {
                         for (let gridX = 0; gridX < 3; gridX++) {
@@ -1154,9 +1246,8 @@ function checkCrafting() {
                         }
                         if (!match) break;
                     }
-                    
                     if (match) {
-                        craftingOutput = { ...recipe.output };
+                        tableCraftingOutput = { ...recipe.output };
                         return;
                     }
                 }
@@ -1220,7 +1311,7 @@ function update() {
     camera.currentZoom += (camera.targetZoom - camera.currentZoom) * camera.zoomSpeed;
     
     
-    if (!isCraftingOpen && !isFurnaceOpen) {
+    if (!isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
         // --- Player Physics ---
         if (keys.a) player.vx = -MOVE_SPEED;
         else if (keys.d) player.vx = MOVE_SPEED;
@@ -1326,19 +1417,27 @@ function update() {
     updateEnemies();
     
     hoveredItem = null;
-    if (isCraftingOpen || isFurnaceOpen) {
+    if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
         for (const key in slotCoords) {
             const { x, y } = slotCoords[key];
             if (mouse.x > x && mouse.x < x + SLOT_SIZE && mouse.y > y && mouse.y < y + SLOT_SIZE) {
                 const [arrayName, indexStr] = key.split('-');
                 const index = parseInt(indexStr);
+                
                 if (arrayName === 'inv') hoveredItem = inventorySlots[index];
                 else if (arrayName === 'hotbar') hoveredItem = hotbarSlots[index];
-                else if (arrayName === 'crafting') hoveredItem = craftingGrid[index];
+                else if (arrayName === 'pCraft') hoveredItem = playerCraftingGrid[index];
+                else if (arrayName === 'pCraftOut') hoveredItem = playerCraftingOutput;
+                else if (arrayName === 'armor') {
+                    if (index === 0) hoveredItem = helmetSlot;
+                    else if (index === 1) hoveredItem = chestplateSlot;
+                    else if (index === 2) hoveredItem = leggingsSlot;
+                }
+                else if (arrayName === 'tCraft') hoveredItem = tableCraftingGrid[index];
+                else if (arrayName === 'tCraftOut') hoveredItem = tableCraftingOutput;
                 else if (arrayName === 'furnaceIn') hoveredItem = furnaceInput;
                 else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
                 else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
-                else if (arrayName === 'craftingOut') hoveredItem = craftingOutput;
                 break;
             }
         }
@@ -1715,7 +1814,7 @@ function draw() {
     ctx.restore();
 
     // --- DRAW UI (This is not scaled) ---
-    if (!isCraftingOpen && !isFurnaceOpen) {
+    if (!isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
         drawHotbar();
     }
     
@@ -1729,11 +1828,15 @@ function draw() {
     ctx.fillText(`Player: ${tX}, ${tY}`, canvas.width - 10, 20);
     ctx.textAlign = "left";
     
-    if (isCraftingOpen) {
-        drawCraftingUI();
+    // --- MODIFIED: Draw correct UI ---
+    if (isInventoryOpen) {
+        drawPlayerInventoryScreen();
+    } else if (isCraftingTableOpen) {
+        drawCraftingTableUI();
     } else if (isFurnaceOpen) {
         drawFurnaceUI();
     }
+    
     if (mouse.heldItem) {
         drawSprite(mouse.heldItem, mouse.x - (SLOT_SIZE/2), mouse.y - (SLOT_SIZE/2), SLOT_SIZE);
         ctx.fillStyle = '#FFFFFF';
@@ -1913,13 +2016,14 @@ function drawHotbar() {
 
 function drawSlot(slot, x, y) {
     const s = SLOT_SIZE;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillStyle = '#707070'; // Dark grey slot
     ctx.fillRect(x, y, s, s);
     drawSlotContents(slot, x, y);
 }
 
-
-function drawPlayerInventoryUI(startX, startY) {
+// --- RENAMED: from drawPlayerInventoryUI to drawMainInventory ---
+// This just draws the 3x9 + 1x9 inventory slots
+function drawMainInventory(startX, startY) {
     const s = SLOT_SIZE;
     const p = SLOT_PADDING;
     for (let y = 0; y < 3; y++) {
@@ -1940,61 +2044,143 @@ function drawPlayerInventoryUI(startX, startY) {
     }
 }
 
-function drawCraftingUI() {
+// --- NEW: Player Inventory Screen (E) ---
+function drawPlayerInventoryScreen() {
     slotCoords = {};
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillStyle = '#C0C0C0'; // Solid light grey
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const s = SLOT_SIZE; const p = SLOT_PADDING;
+    
+    // --- 2x2 Crafting Grid ---
+    const craftGridX = (canvas.width / 2) + 20;
+    const craftGridY = (canvas.height / 2) - 100;
+    ctx.fillStyle = '#000000';
+    ctx.font = '18px Arial';
+    ctx.fillText('Crafting', craftGridX, craftGridY - 10);
+    
+    for (let y = 0; y < 2; y++) {
+        for (let x = 0; x < 2; x++) {
+            const i = y * 2 + x;
+            const sx = craftGridX + x * (s + p);
+            const sy = craftGridY + y * (s + p);
+            slotCoords[`pCraft-${i}`] = { x: sx, y: sy };
+            drawSlot(playerCraftingGrid[i], sx, sy);
+        }
+    }
+    
+    const outputX = craftGridX + 3 * (s + p);
+    const outputY = craftGridY + (s + p) / 2;
+    slotCoords['pCraftOut-0'] = { x: outputX, y: outputY };
+    drawSlot(playerCraftingOutput, outputX, outputY);
+    
+    ctx.fillStyle = '#000000';
+    ctx.font = '30px Arial';
+    ctx.fillText('->', craftGridX + 2 * (s+p) + 5, outputY + s/1.5);
+
+    // --- Player Doll & Armor ---
+    const playerDollX = (canvas.width / 2) - 150;
+    const playerDollY = (canvas.height / 2) - 100;
+    
+    // Draw simple player doll
+    ctx.fillStyle = '#E0A07E'; // Skin
+    ctx.fillRect(playerDollX, playerDollY, s, s); // Head
+    ctx.fillStyle = '#4080A0'; // Shirt
+    ctx.fillRect(playerDollX, playerDollY + s, s, s * 1.5); // Body
+    ctx.fillStyle = '#304060'; // Pants
+    ctx.fillRect(playerDollX, playerDollY + s * 2.5, s, s * 1.5); // Legs
+    
+    // Draw Armor Slots
+    const armorSlotX = playerDollX - s - p;
+    const armorSlotY = playerDollY;
+    
+    slotCoords['armor-0'] = { x: armorSlotX, y: armorSlotY };
+    drawSlot(helmetSlot, armorSlotX, armorSlotY);
+    
+    slotCoords['armor-1'] = { x: armorSlotX, y: armorSlotY + s + p };
+    drawSlot(chestplateSlot, armorSlotX, armorSlotY + s + p);
+    
+    slotCoords['armor-2'] = { x: armorSlotX, y: armorSlotY + 2 * (s + p) };
+    drawSlot(leggingsSlot, armorSlotX, armorSlotY + 2 * (s + p));
+
+    // --- Main Inventory ---
+    const invGridWidth = 9 * (s + p) - p;
+    const invGridX = (canvas.width / 2) - (invGridWidth / 2);
+    const invGridY = (canvas.height / 2) + 20;
+    drawMainInventory(invGridX, invGridY);
+}
+
+// --- RENAMED: from drawCraftingUI to drawCraftingTableUI ---
+function drawCraftingTableUI() {
+    slotCoords = {};
+    ctx.fillStyle = '#C0C0C0'; // Solid light grey
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     const s = SLOT_SIZE; const p = SLOT_PADDING;
     const craftGridX = (canvas.width / 2) - 100;
     const craftGridY = (canvas.height / 2) - 100;
-    ctx.fillStyle = '#FFFFFF';
+    
+    ctx.fillStyle = '#000000';
     ctx.font = '18px Arial';
     ctx.fillText('Crafting', craftGridX, craftGridY - 10);
+    
+    // 3x3 Grid
     for (let y = 0; y < 3; y++) {
         for (let x = 0; x < 3; x++) {
             const i = y * 3 + x;
             const sx = craftGridX + x * (s + p);
             const sy = craftGridY + y * (s + p);
-            slotCoords[`crafting-${i}`] = { x: sx, y: sy };
-            drawSlot(craftingGrid[i], sx, sy);
+            slotCoords[`tCraft-${i}`] = { x: sx, y: sy };
+            drawSlot(tableCraftingGrid[i], sx, sy);
         }
     }
+    
     const outputX = craftGridX + 4 * (s + p);
     const outputY = craftGridY + (s + p);
-    slotCoords['craftingOut-0'] = { x: outputX, y: outputY };
-    drawSlot(craftingOutput, outputX, outputY);
-    ctx.fillStyle = '#FFFFFF';
+    slotCoords['tCraftOut-0'] = { x: outputX, y: outputY };
+    drawSlot(tableCraftingOutput, outputX, outputY);
+    
+    ctx.fillStyle = '#000000';
     ctx.font = '30px Arial';
     ctx.fillText('->', craftGridX + 3 * (s+p), outputY + s/1.5);
+    
     const invGridWidth = 9 * (s + p) - p;
     const invGridX = (canvas.width / 2) - (invGridWidth / 2);
     const invGridY = (canvas.height / 2) + 20;
-    drawPlayerInventoryUI(invGridX, invGridY);
+    drawMainInventory(invGridX, invGridY);
 }
 
 function drawFurnaceUI() {
     slotCoords = {};
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.fillStyle = '#C0C0C0'; // Solid light grey
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     const s = SLOT_SIZE; const p = SLOT_PADDING;
     const furnaceX = (canvas.width / 2) - 100;
     const furnaceY = (canvas.height / 2) - 100;
-    ctx.fillStyle = '#FFFFFF';
+    
+    ctx.fillStyle = '#000000';
     ctx.font = '18px Arial';
     ctx.fillText('Furnace', furnaceX, furnaceY - 10);
+    
     const inputX = furnaceX; const inputY = furnaceY;
     slotCoords['furnaceIn-0'] = { x: inputX, y: inputY };
     drawSlot(furnaceInput, inputX, inputY);
+    
     const fuelX = furnaceX; const fuelY = furnaceY + 2 * (s + p);
     slotCoords['furnaceFuel-0'] = { x: fuelX, y: fuelY };
     drawSlot(furnaceFuel, fuelX, fuelY);
+    
     const outputX = furnaceX + 3 * (s + p);
     const outputY = furnaceY + 1 * (s + p);
     slotCoords['furnaceOut-0'] = { x: outputX, y: outputY };
     drawSlot(furnaceOutput, outputX, outputY);
-    ctx.fillStyle = '#FFFFFF';
+    
+    ctx.fillStyle = '#000000';
     ctx.font = '30px Arial';
     ctx.fillText('->', furnaceX + 2 * (s+p) - 10, outputY + s/1.5);
+    
+    // Progress bar
     ctx.fillStyle = '#444';
     ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s, 4);
     if(furnaceCookTime > 0) {
@@ -2002,6 +2188,8 @@ function drawFurnaceUI() {
         const progress = (COOK_TIME - furnaceCookTime) / COOK_TIME;
         ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s * progress, 4);
     }
+    
+    // Fuel bar
     ctx.fillStyle = '#444';
     ctx.fillRect(fuelX, fuelY - 8, s, 4);
     if(furnaceFuelTime > 0) {
@@ -2010,10 +2198,11 @@ function drawFurnaceUI() {
         const progress = furnaceFuelTime / maxFuel;
         ctx.fillRect(fuelX, fuelY - 8, s * progress, 4);
     }
+    
     const invGridWidth = 9 * (s + p) - p;
     const invGridX = (canvas.width / 2) - (invGridWidth / 2);
     const invGridY = (canvas.height / 2) + 20;
-    drawPlayerInventoryUI(invGridX, invGridY);
+    drawMainInventory(invGridX, invGridY);
 }
 
 
