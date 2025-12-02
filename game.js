@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.20 (Smart Cursor & UI Fix) ---
+// --- GAME MAKER: v10.21 (Mining Fix & Smart Cursor Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -155,7 +155,7 @@ const TOOL_TIER = {
     [TILES.PLATINUM_PICKAXE]: 6
 };
 
-// --- MODIFIED: Use new TOOL_MINE_SPEED ---
+// --- MODIFIED: Renamed BLOCK_HARDNESS to TOOL_MINE_SPEED ---
 const TOOL_MINE_SPEED = {
     [TILES.WOOD_PICKAXE]: 25,
     [TILES.STONE_PICKAXE]: 20,
@@ -912,6 +912,8 @@ function setupInputListeners() {
         const rect = canvas.getBoundingClientRect();
         mouse.rawX = e.clientX - rect.left;
         mouse.rawY = e.clientY - rect.top;
+        
+        // --- Smart cursor logic now in update() ---
     });
     
     canvas.addEventListener('mousedown', (e) => {
@@ -935,7 +937,7 @@ function setupInputListeners() {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
             if (e.button === 0) {
-                useHeldItem();
+                useHeldItem(); // --- MODIFIED: This is the new master function
             }
             if (e.button === 2) {
                 handleRightClick();
@@ -965,7 +967,7 @@ function resizeCanvas() {
 
 // --- 8. Interaction Logic ---
 function useHeldItem() {
-    if (player.attackCooldown > 0) return;
+    if (player.attackCooldown > 0) return; // Still swinging
     
     const heldItem = hotbarSlots[selectedSlot];
     const heldId = heldItem ? heldItem.id : null;
@@ -981,6 +983,7 @@ function useHeldItem() {
     } else if (isPick) {
         startMining(mouse.tileX, mouse.tileY);
     } else {
+        // Hand/Block/etc. - just punch
         player.isSwinging = true;
         player.swingDuration = 20; // Fast punch
         player.swingTimer = 20;
@@ -1019,13 +1022,14 @@ function startMining(x, y) {
         return;
     }
     
+    // --- BUG FIX: Use TOOL_MINE_SPEED ---
     const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30;
     
     miningState.isMining = true;
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = toolMineSpeed;
+    miningState.requiredTime = toolMineSpeed; // Correctly use new speed
     
     player.isSwinging = true;
     player.swingDuration = miningState.requiredTime;
@@ -1043,6 +1047,7 @@ function stopMining() {
     miningState.isMining = false;
     miningState.progress = 0;
     
+    // Only stop swing if mouse is up OR if not smart mining
     if (!mouse.isDown || !mouse.isSmartCursor) {
         player.isSwinging = false;
         player.swingTimer = 0;
@@ -2727,7 +2732,7 @@ function masterLoop() {
 function init() {
     console.log("Initializing game...");
     gameState = 'PLAYING';
-    canvas.style.cursor = 'none'; // Hide cursor
+    canvas.style.cursor = 'none';
     
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
