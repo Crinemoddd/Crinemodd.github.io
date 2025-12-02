@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.20 (Mining Speed Bug Fix) ---
+// --- GAME MAKER: v10.20 (Smart Cursor & UI Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -155,7 +155,7 @@ const TOOL_TIER = {
     [TILES.PLATINUM_PICKAXE]: 6
 };
 
-// --- MODIFIED: Renamed BLOCK_HARDNESS to TOOL_MINE_SPEED ---
+// --- MODIFIED: Use new TOOL_MINE_SPEED ---
 const TOOL_MINE_SPEED = {
     [TILES.WOOD_PICKAXE]: 25,
     [TILES.STONE_PICKAXE]: 20,
@@ -843,47 +843,50 @@ function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Control') keys.Control = true;
         
-        if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
-             if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') {
+        // --- BUG FIX: Check gameState ---
+        if (gameState === 'PLAYING') {
+            if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
+                if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') {
+                    if (!keys.e) {
+                        isInventoryOpen = false;
+                        isCraftingTableOpen = false;
+                        isFurnaceOpen = false;
+                        dropHeldItem();
+                    }
+                    keys.e = true;
+                }
+                return;
+            }
+            if (e.key === 'w' || e.key === 'W') keys.w = true;
+            if (e.key === ' ') {
+                keys.w = true;
+                if (isCreativeMode) {
+                    const now = Date.now();
+                    if (now - player.lastJumpPressTime < 300) {
+                        player.isFlying = !player.isFlying;
+                        player.vy = 0;
+                    }
+                    player.lastJumpPressTime = now;
+                }
+            }
+            if (e.key === 'a' || e.key === 'A') keys.a = true;
+            if (e.key === 'd' || e.key === 'D') keys.d = true;
+            if (e.key === 's' || e.key === 'S') keys.s = true;
+            if (e.key === 'e' || e.key === 'E') {
                 if (!keys.e) {
-                    isInventoryOpen = false;
+                    isInventoryOpen = true;
                     isCraftingTableOpen = false;
                     isFurnaceOpen = false;
-                    dropHeldItem();
                 }
                 keys.e = true;
             }
-            return;
-        }
-        if (e.key === 'w' || e.key === 'W') keys.w = true;
-        if (e.key === ' ') {
-            keys.w = true;
-            if (isCreativeMode) {
-                const now = Date.now();
-                if (now - player.lastJumpPressTime < 300) {
-                    player.isFlying = !player.isFlying;
-                    player.vy = 0;
-                }
-                player.lastJumpPressTime = now;
-            }
-        }
-        if (e.key === 'a' || e.key === 'A') keys.a = true;
-        if (e.key === 'd' || e.key === 'D') keys.d = true;
-        if (e.key === 's' || e.key === 'S') keys.s = true;
-        if (e.key === 'e' || e.key === 'E') {
-            if (!keys.e) {
-                isInventoryOpen = true;
-                isCraftingTableOpen = false;
-                isFurnaceOpen = false;
-            }
-            keys.e = true;
-        }
-        if (e.key === 'z' || e.key === 'Z') keys.z = true;
-        if (e.key === 'x' || e.key === 'X') keys.x = true;
+            if (e.key === 'z' || e.key === 'Z') keys.z = true;
+            if (e.key === 'x' || e.key === 'X') keys.x = true;
 
-        if (e.key >= '1' && e.key <= '9') {
-            selectedSlot = parseInt(e.key) - 1;
-            stopMining();
+            if (e.key >= '1' && e.key <= '9') {
+                selectedSlot = parseInt(e.key) - 1;
+                stopMining();
+            }
         }
     });
     window.addEventListener('keyup', (e) => {
@@ -909,8 +912,6 @@ function setupInputListeners() {
         const rect = canvas.getBoundingClientRect();
         mouse.rawX = e.clientX - rect.left;
         mouse.rawY = e.clientY - rect.top;
-        
-        // --- Smart cursor logic now in update() ---
     });
     
     canvas.addEventListener('mousedown', (e) => {
@@ -934,7 +935,7 @@ function setupInputListeners() {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
             if (e.button === 0) {
-                useHeldItem(); // --- MODIFIED: This is the new master function
+                useHeldItem();
             }
             if (e.button === 2) {
                 handleRightClick();
@@ -980,7 +981,6 @@ function useHeldItem() {
     } else if (isPick) {
         startMining(mouse.tileX, mouse.tileY);
     } else {
-        // Hand/Block/etc. - just punch
         player.isSwinging = true;
         player.swingDuration = 20; // Fast punch
         player.swingTimer = 20;
@@ -1019,14 +1019,13 @@ function startMining(x, y) {
         return;
     }
     
-    // --- BUG FIX: Use TOOL_MINE_SPEED ---
     const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30;
     
     miningState.isMining = true;
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = toolMineSpeed; // Correctly use new speed
+    miningState.requiredTime = toolMineSpeed;
     
     player.isSwinging = true;
     player.swingDuration = miningState.requiredTime;
@@ -1044,7 +1043,6 @@ function stopMining() {
     miningState.isMining = false;
     miningState.progress = 0;
     
-    // Only stop swing if mouse is up OR if not smart mining
     if (!mouse.isDown || !mouse.isSmartCursor) {
         player.isSwinging = false;
         player.swingTimer = 0;
@@ -1185,7 +1183,7 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             }
 
             if (isShiftClicking && slotArray) {
-                quickMoveItem(slotArray, index, fromArea, setter);
+                quickMoveItem(slotArray, index, arrayName, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -1476,6 +1474,82 @@ function updateFurnace() {
         furnaceCookTime = 0;
     }
 }
+
+function updateSmartCursor() {
+    mouse.isSmartCursor = keys.Control;
+    
+    const mouseWorldX = (mouse.rawX / camera.currentZoom) + camera.x;
+    const mouseWorldY = (mouse.rawY / camera.currentZoom) + camera.y;
+    
+    if (!mouse.isSmartCursor || isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
+        mouse.tileX = toTileCoord(mouseWorldX);
+        mouse.tileY = toTileCoord(mouseWorldY);
+        return;
+    }
+
+    const playerCX = player.x + player.width / 2;
+    const playerCY = player.y + player.height / 2;
+    
+    const dirX = mouseWorldX - playerCX;
+    const dirY = mouseWorldY - playerCY;
+    const dist = Math.sqrt(dirX*dirX + dirY*dirY);
+    
+    if (dist === 0) {
+        mouse.tileX = toTileCoord(playerCX);
+        mouse.tileY = toTileCoord(playerCY);
+        return;
+    }
+    
+    const normX = dirX / dist;
+    const normY = dirY / dist;
+    
+    const maxDist = INTERACTION_RANGE * TILE_SIZE;
+    let bestTile = null;
+    
+    const heldItem = hotbarSlots[selectedSlot];
+    const isPlacing = heldItem && heldItem.id < 100;
+
+    for (let d = TILE_SIZE / 2; d <= maxDist; d += 4) {
+        const checkX = playerCX + normX * d;
+        const checkY = playerCY + normY * d;
+        
+        const tileX = toTileCoord(checkX);
+        const tileY = toTileCoord(checkY);
+        const tile = getTile(tileX, tileY);
+        
+        if (isPlacing) {
+            if (tile === TILES.AIR) {
+                const neighbors = [[tileX-1, tileY], [tileX+1, tileY], [tileX, tileY-1], [tileX, tileY+1]];
+                let isAdjacentToSolid = false;
+                for (const [nx, ny] of neighbors) {
+                    const neighborTile = getTile(nx, ny);
+                    if (neighborTile !== TILES.AIR && isBlockSolid(neighborTile)) {
+                        isAdjacentToSolid = true;
+                        break;
+                    }
+                }
+                if (isAdjacentToSolid) {
+                    bestTile = { x: tileX, y: tileY };
+                    break;
+                }
+            }
+        } else {
+            if (tile !== TILES.AIR) {
+                bestTile = { x: tileX, y: tileY };
+                break;
+            }
+        }
+    }
+    
+    if (bestTile) {
+        mouse.tileX = bestTile.x;
+        mouse.tileY = bestTile.y;
+    } else {
+        mouse.tileX = toTileCoord(playerCX + normX * maxDist);
+        mouse.tileY = toTileCoord(playerCY + normY * maxDist);
+    }
+}
+
 
 // --- 10. Game Loop (Update Logic) ---
 function update() {
@@ -1889,16 +1963,18 @@ function updateMining() {
                 // --- BUG FIX: Reset state *before* auto-mining ---
                 miningState.isMining = false;
                 miningState.progress = 0;
-                player.isSwinging = false;
-                player.swingTimer = 0;
-                player.attackCooldown = 0;
                 
                 if (mouse.isSmartCursor && mouse.isDown) {
+                    player.attackCooldown = 0; // Force reset cooldown
                     updateSmartCursor();
                     const newTile = getTile(mouse.tileX, mouse.tileY);
                     if (newTile !== TILES.AIR) {
                         useHeldItem(); // This will call startMining()
                     }
+                } else {
+                    player.isSwinging = false;
+                    player.swingTimer = 0;
+                    player.attackCooldown = 0;
                 }
             }
         }
@@ -2232,7 +2308,7 @@ function drawHeldItem() {
     }
 
     const isSword = heldItem.id >= 1000;
-    const itemSize = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 1.5; // Longer swords
+    const itemSize = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 1.5;
     
     ctx.save();
     ctx.translate(Math.round(player.x + player.width / 2), Math.round(player.y + player.height / 2 - 10));
@@ -2651,7 +2727,7 @@ function masterLoop() {
 function init() {
     console.log("Initializing game...");
     gameState = 'PLAYING';
-    canvas.style.cursor = 'crosshair';
+    canvas.style.cursor = 'none'; // Hide cursor
     
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
