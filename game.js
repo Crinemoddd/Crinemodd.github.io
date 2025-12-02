@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.19 (Tool Animations, Attack Speed, Smart Cursor) ---
+// --- GAME MAKER: v10.20 (Terraria Swing Animation) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -155,8 +155,7 @@ const TOOL_TIER = {
     [TILES.PLATINUM_PICKAXE]: 6
 };
 
-// --- MODIFIED: Renamed BLOCK_HARDNESS to TOOL_MINE_SPEED ---
-// This is now how long it takes *in frames* (60=1sec)
+// --- MODIFIED: Use new TOOL_MINE_SPEED ---
 const TOOL_MINE_SPEED = {
     [TILES.WOOD_PICKAXE]: 25,
     [TILES.STONE_PICKAXE]: 20,
@@ -398,7 +397,6 @@ let player = {
     attackCooldown: 0,
     isFlying: false,
     lastJumpPressTime: 0,
-    // --- NEW: Animation State ---
     isSwinging: false,
     swingTimer: 0,
     swingDuration: 0,
@@ -410,15 +408,14 @@ let camera = {
     currentZoom: 1.0,
     zoomSpeed: 0.05
 };
-// --- MODIFIED: Added Control key ---
 let keys = { w: false, a: false, d: false, s: false, e: false, z: false, x: false, Control: false };
 let mouse = {
     x: 0, y: 0,
-    rawX: 0, rawY: 0, // Screen position
-    tileX: 0, tileY: 0, // World tile position
+    rawX: 0, rawY: 0,
+    tileX: 0, tileY: 0,
     isDown: false,
     heldItem: null,
-    isSmartCursor: false // NEW
+    isSmartCursor: false
 };
 let miningState = {
     isMining: false,
@@ -431,7 +428,7 @@ const GRAVITY = 0.3;
 const JUMP_STRENGTH = -8;
 const MOVE_SPEED = 3;
 const INTERACTION_RANGE = 4;
-const CAMERA_SMOOTH_FACTOR = 0.1;
+const CAMERA_SMOOTH_FACTOR = 0.1; // No longer used
 const INVINCIBILITY_TIME = 60;
 
 let hotbarSlots = new Array(9).fill(null);
@@ -910,10 +907,10 @@ function setupInputListeners() {
         if (gameState === 'MENU') return;
         
         const rect = canvas.getBoundingClientRect();
-        mouse.rawX = e.clientX - rect.left; // Store raw screen X
-        mouse.rawY = e.clientY - rect.top; // Store raw screen Y
+        mouse.rawX = e.clientX - rect.left;
+        mouse.rawY = e.clientY - rect.top;
         
-        // This logic is now handled in updateSmartCursor()
+        // Mouse tileX/tileY is now set in update() by updateSmartCursor()
     });
     
     canvas.addEventListener('mousedown', (e) => {
@@ -980,7 +977,6 @@ function tryAttack(x, y) {
         
         damageEnemy(enemy, damage);
         
-        // --- NEW: Start swing animation ---
         player.isSwinging = true;
         player.swingDuration = TOOL_ATTACK_SPEED[heldId] ?? 30; // Default 0.5s
         player.swingTimer = player.swingDuration;
@@ -992,7 +988,7 @@ function tryAttack(x, y) {
 }
 
 function startMining(x, y) {
-    if (player.attackCooldown > 0) return; // Can't mine while swinging
+    if (player.attackCooldown > 0) return;
     
     const tileType = getTile(x, y);
     if (tileType === TILES.AIR) {
@@ -1022,20 +1018,18 @@ function startMining(x, y) {
         return;
     }
     
-    // --- MODIFIED: Use new TOOL_MINE_SPEED ---
-    const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30; // Default speed
+    const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30;
     
     miningState.isMining = true;
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = toolMineSpeed; // Use the tool's speed
+    miningState.requiredTime = toolMineSpeed;
     
-    // --- NEW: Start swing animation for mining ---
     player.isSwinging = true;
     player.swingDuration = miningState.requiredTime;
     player.swingTimer = miningState.requiredTime;
-    player.attackCooldown = miningState.requiredTime; // Can't attack while mining
+    player.attackCooldown = miningState.requiredTime;
     
     if (isCreativeMode) {
         miningState.progress = miningState.requiredTime;
@@ -1045,8 +1039,7 @@ function startMining(x, y) {
 function stopMining() {
     miningState.isMining = false;
     miningState.progress = 0;
-    // --- NEW: Stop swing animation ---
-    if (player.isSwinging && !mouse.isDown) { // Only stop if mouse is up
+    if (player.isSwinging && !mouse.isDown) {
         player.isSwinging = false;
         player.swingTimer = 0;
         player.attackCooldown = 0;
@@ -1186,7 +1179,7 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             }
 
             if (isShiftClicking && slotArray) {
-                quickMoveItem(slotArray, index, fromArea, setter);
+                quickMoveItem(slotArray, index, arrayName, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -1499,6 +1492,13 @@ function updateSmartCursor() {
     const dirX = mouseWorldX - playerCX;
     const dirY = mouseWorldY - playerCY;
     const dist = Math.sqrt(dirX*dirX + dirY*dirY);
+    
+    if (dist === 0) { // Avoid division by zero
+        mouse.tileX = toTileCoord(playerCX);
+        mouse.tileY = toTileCoord(playerCY);
+        return;
+    }
+    
     const normX = dirX / dist;
     const normY = dirY / dist;
     
@@ -1508,6 +1508,7 @@ function updateSmartCursor() {
     const heldItem = hotbarSlots[selectedSlot];
     const isPlacing = heldItem && heldItem.id < 100;
 
+    // Raycast out from player
     for (let d = TILE_SIZE / 2; d <= maxDist; d += 4) {
         const checkX = playerCX + normX * d;
         const checkY = playerCY + normY * d;
@@ -1522,7 +1523,8 @@ function updateSmartCursor() {
                 const neighbors = [[tileX-1, tileY], [tileX+1, tileY], [tileX, tileY-1], [tileX, tileY+1]];
                 let isAdjacentToSolid = false;
                 for (const [nx, ny] of neighbors) {
-                    if (getTile(nx, ny) !== TILES.AIR && isBlockSolid(getTile(nx, ny))) {
+                    const neighborTile = getTile(nx, ny);
+                    if (neighborTile !== TILES.AIR && isBlockSolid(neighborTile)) {
                         isAdjacentToSolid = true;
                         break;
                     }
@@ -1545,6 +1547,7 @@ function updateSmartCursor() {
         mouse.tileX = bestTile.x;
         mouse.tileY = bestTile.y;
     } else {
+        // If no tile found, target the end of the ray
         mouse.tileX = toTileCoord(playerCX + normX * maxDist);
         mouse.tileY = toTileCoord(playerCY + normY * maxDist);
     }
@@ -1559,25 +1562,6 @@ function update() {
         player.attackCooldown--;
     }
     
-    // --- Cursor and UI State ---
-    if (gameState === 'PLAYING' && !isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
-        canvas.style.cursor = 'crosshair';
-    } else {
-        canvas.style.cursor = 'default';
-    }
-    
-    // --- Swing Animation ---
-    if (player.isSwinging) {
-        player.swingTimer--;
-        if (player.swingTimer <= 0) {
-            player.isSwinging = false;
-        } else {
-            const progress = 1 - (player.swingTimer / player.swingDuration); // 0 to 1
-            // This sine wave goes from -45 deg to +90 deg and back to -45
-            player.swingAngle = (Math.sin(progress * Math.PI) * 135 - 45) * (Math.PI / 180);
-        }
-    }
-
     if (keys.z) {
         camera.targetZoom -= 0.02;
     }
@@ -1587,7 +1571,32 @@ function update() {
     camera.targetZoom = Math.max(0.8, Math.min(camera.targetZoom, 3.0));
     camera.currentZoom += (camera.targetZoom - camera.currentZoom) * camera.zoomSpeed;
     
-    updateSmartCursor(); // Handle mouse logic
+    // --- MODIFIED: Handle cursor state ---
+    if (gameState === 'PLAYING' && !isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
+        canvas.style.cursor = 'crosshair';
+        updateSmartCursor(); // Update smart cursor logic
+    } else {
+        canvas.style.cursor = 'default';
+        mouse.isSmartCursor = false;
+        // Keep mouse tile pos up-to-date for UI tooltips
+        mouse.tileX = toTileCoord((mouse.rawX / camera.currentZoom) + camera.x);
+        mouse.tileY = toTileCoord((mouse.rawY / camera.currentZoom) + camera.y);
+    }
+    
+    // --- MODIFIED: Swing Animation ---
+    if (player.isSwinging) {
+        player.swingTimer--;
+        if (player.swingTimer <= 0) {
+            player.isSwinging = false;
+        } else {
+            const progress = 1 - (player.swingTimer / player.swingDuration); // 0 to 1
+            const startAngle = -120; // "Behind head"
+            const endAngle = 90;     // "At feet"
+            const totalSwing = endAngle - startAngle;
+            player.swingAngle = (startAngle + (totalSwing * progress)) * (Math.PI / 180);
+        }
+    }
+    
     
     if (!isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
         // --- Player Physics ---
@@ -1930,11 +1939,8 @@ function updateMining() {
                 
                 stopMining();
                 
-                // --- NEW: Auto-mine next block with smart cursor ---
                 if (mouse.isSmartCursor && mouse.isDown) {
-                    // Force cursor update
                     updateSmartCursor();
-                    // Start mining the new tile
                     if (getTile(mouse.tileX, mouse.tileY) !== TILES.AIR) {
                         startMining(mouse.tileX, mouse.tileY);
                     }
@@ -2089,7 +2095,7 @@ function draw() {
     // --- Draw Entities ---
     drawPlayer();
     drawEnemies();
-    drawHeldItem(); // --- NEW ---
+    drawHeldItem();
     
     // --- Draw Mouse & Mining ---
     const playerTileX = toTileCoord(player.x + player.width / 2);
@@ -2097,18 +2103,17 @@ function draw() {
     const dist = Math.sqrt(Math.pow(playerTileX - mouse.tileX, 2) + Math.pow(playerTileY - mouse.tileY, 2));
     
     if (dist <= INTERACTION_RANGE && getTile(mouse.tileX, mouse.tileY) !== TILES.AIR) {
-        // --- NEW: Smart Cursor vs Normal Cursor ---
         if (mouse.isSmartCursor) {
-            ctx.strokeStyle = '#FFFF00'; // Yellow for smart cursor
+            ctx.strokeStyle = '#FFFF00';
             ctx.lineWidth = 2;
         } else {
-            ctx.strokeStyle = '#FFFFFF'; // White for normal
+            ctx.strokeStyle = '#FFFFFF';
             ctx.lineWidth = 1;
         }
         ctx.strokeRect(mouse.tileX * TILE_SIZE, mouse.tileY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
     }
 
-    if (miningState.isMining && !isCreativeMode) { // No crack in creative
+    if (miningState.isMining && !isCreativeMode) {
         const progress = miningState.progress / miningState.requiredTime;
         const crackFrame = Math.floor(progress * 10);
         if (crackFrame > 0) {
@@ -2264,32 +2269,28 @@ function drawPlayer() {
     ctx.restore();
 }
 
-// --- NEW: Draw Held Item ---
+// --- MODIFIED: drawHeldItem ---
 function drawHeldItem() {
     const heldItem = hotbarSlots[selectedSlot];
-    if (!heldItem || !TILE_SPRITES[heldItem.id]) return; // No item
-    if (heldItem.id < 100) return; // Not a tool or weapon
-    if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) return; // Don't draw in UI
+    // --- Only draw if swinging, and it's a valid item ---
+    if (!player.isSwinging || !heldItem || !TILE_SPRITES[heldItem.id] || heldItem.id < 100 || isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
+        return;
+    }
 
-    const itemSize = TILE_SIZE * 1.5; // Make item bigger
+    const itemSize = TILE_SIZE * 1.5; 
     
     ctx.save();
     // Translate to player's shoulder
     ctx.translate(Math.round(player.x + player.width / 2), Math.round(player.y + player.height / 2 - 10));
     ctx.scale(player.direction, 1);
     
-    if (player.isSwinging) {
-        ctx.translate(0, 10); // Pivot around shoulder
-        ctx.rotate(player.swingAngle * player.direction); // Apply swing angle
-        ctx.translate(0, -10);
-    } else {
-        // Hold item normally
-        ctx.rotate(-45 * (Math.PI / 180));
-    }
+    // Apply swing angle
+    ctx.translate(0, 10); 
+    ctx.rotate(player.swingAngle * player.direction); 
+    ctx.translate(0, -10);
     
     ctx.translate(10, 10); // Move out to hand position
 
-    // Draw the sprite, centered on its handle
     drawSprite(heldItem, -itemSize / 2, -itemSize, itemSize, itemSize);
     
     ctx.restore();
@@ -2699,7 +2700,7 @@ function masterLoop() {
 function init() {
     console.log("Initializing game...");
     gameState = 'PLAYING';
-    canvas.style.cursor = 'crosshair'; // Set game cursor
+    canvas.style.cursor = 'crosshair';
     
     const spawnX = 8;
     const spawnY = findSurfaceY(spawnX) - 1;
