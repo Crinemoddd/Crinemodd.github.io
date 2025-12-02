@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.19 (Terraria Combat & Smart Cursor) ---
+// --- GAME MAKER: v10.20 (Mining Speed Bug Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -910,7 +910,7 @@ function setupInputListeners() {
         mouse.rawX = e.clientX - rect.left;
         mouse.rawY = e.clientY - rect.top;
         
-        // Mouse tileX/tileY is now set in update() by updateSmartCursor()
+        // --- Smart cursor logic now in update() ---
     });
     
     canvas.addEventListener('mousedown', (e) => {
@@ -963,9 +963,8 @@ function resizeCanvas() {
 }
 
 // --- 8. Interaction Logic ---
-// --- NEW: Master item use function ---
 function useHeldItem() {
-    if (player.attackCooldown > 0) return; // Still swinging
+    if (player.attackCooldown > 0) return;
     
     const heldItem = hotbarSlots[selectedSlot];
     const heldId = heldItem ? heldItem.id : null;
@@ -1020,13 +1019,14 @@ function startMining(x, y) {
         return;
     }
     
+    // --- BUG FIX: Use TOOL_MINE_SPEED ---
     const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30;
     
     miningState.isMining = true;
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = toolMineSpeed;
+    miningState.requiredTime = toolMineSpeed; // Correctly use new speed
     
     player.isSwinging = true;
     player.swingDuration = miningState.requiredTime;
@@ -1039,14 +1039,17 @@ function startMining(x, y) {
 }
 
 function stopMining() {
-    // This function is now ONLY for interrupting
     if (!miningState.isMining) return;
     
     miningState.isMining = false;
     miningState.progress = 0;
-    player.isSwinging = false;
-    player.swingTimer = 0;
-    player.attackCooldown = 0;
+    
+    // Only stop swing if mouse is up OR if not smart mining
+    if (!mouse.isDown || !mouse.isSmartCursor) {
+        player.isSwinging = false;
+        player.swingTimer = 0;
+        player.attackCooldown = 0;
+    }
 }
 
 function handleRightClick() {
@@ -1474,83 +1477,6 @@ function updateFurnace() {
     }
 }
 
-// --- NEW: Smart Cursor Logic ---
-function updateSmartCursor() {
-    mouse.isSmartCursor = keys.Control;
-    
-    const mouseWorldX = (mouse.rawX / camera.currentZoom) + camera.x;
-    const mouseWorldY = (mouse.rawY / camera.currentZoom) + camera.y;
-    
-    if (!mouse.isSmartCursor || isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
-        mouse.tileX = toTileCoord(mouseWorldX);
-        mouse.tileY = toTileCoord(mouseWorldY);
-        return;
-    }
-
-    const playerCX = player.x + player.width / 2;
-    const playerCY = player.y + player.height / 2;
-    
-    const dirX = mouseWorldX - playerCX;
-    const dirY = mouseWorldY - playerCY;
-    const dist = Math.sqrt(dirX*dirX + dirY*dirY);
-    
-    if (dist === 0) {
-        mouse.tileX = toTileCoord(playerCX);
-        mouse.tileY = toTileCoord(playerCY);
-        return;
-    }
-    
-    const normX = dirX / dist;
-    const normY = dirY / dist;
-    
-    const maxDist = INTERACTION_RANGE * TILE_SIZE;
-    let bestTile = null;
-    
-    const heldItem = hotbarSlots[selectedSlot];
-    const isPlacing = heldItem && heldItem.id < 100;
-
-    for (let d = TILE_SIZE / 2; d <= maxDist; d += 4) {
-        const checkX = playerCX + normX * d;
-        const checkY = playerCY + normY * d;
-        
-        const tileX = toTileCoord(checkX);
-        const tileY = toTileCoord(checkY);
-        const tile = getTile(tileX, tileY);
-        
-        if (isPlacing) {
-            if (tile === TILES.AIR) {
-                const neighbors = [[tileX-1, tileY], [tileX+1, tileY], [tileX, tileY-1], [tileX, tileY+1]];
-                let isAdjacentToSolid = false;
-                for (const [nx, ny] of neighbors) {
-                    const neighborTile = getTile(nx, ny);
-                    if (neighborTile !== TILES.AIR && isBlockSolid(neighborTile)) {
-                        isAdjacentToSolid = true;
-                        break;
-                    }
-                }
-                if (isAdjacentToSolid) {
-                    bestTile = { x: tileX, y: tileY };
-                    break;
-                }
-            }
-        } else {
-            if (tile !== TILES.AIR) {
-                bestTile = { x: tileX, y: tileY };
-                break;
-            }
-        }
-    }
-    
-    if (bestTile) {
-        mouse.tileX = bestTile.x;
-        mouse.tileY = bestTile.y;
-    } else {
-        mouse.tileX = toTileCoord(playerCX + normX * maxDist);
-        mouse.tileY = toTileCoord(playerCY + normY * maxDist);
-    }
-}
-
-
 // --- 10. Game Loop (Update Logic) ---
 function update() {
     if (player.lastDamageTime > 0) {
@@ -1570,7 +1496,7 @@ function update() {
     camera.currentZoom += (camera.targetZoom - camera.currentZoom) * camera.zoomSpeed;
     
     if (gameState === 'PLAYING' && !isInventoryOpen && !isCraftingTableOpen && !isFurnaceOpen) {
-        canvas.style.cursor = 'none'; // Hide cursor
+        canvas.style.cursor = 'none';
         updateSmartCursor();
     } else {
         canvas.style.cursor = 'default';
@@ -1798,14 +1724,12 @@ function checkSwingHitDetection() {
     
     const isSword = heldId >= 1000;
     const isPick = heldId >= 100 && heldId < 1000;
-    const isHand = !heldItem || heldId < 100;
     
-    if (isPick) return; // Picks only hit blocks
+    if (isPick) return;
     
-    const damage = WEAPON_DAMAGE[heldId] ?? 2; // Hand damage
-    const swingLength = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 0.8; // Sword vs Hand
+    const damage = WEAPON_DAMAGE[heldId] ?? 2;
+    const swingLength = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 0.8;
     
-    // Calculate the "tip" of the weapon
     const hitX = (player.x + player.width/2) + Math.cos(player.swingAngle) * swingLength * player.direction;
     const hitY = (player.y + player.height/2 - 10) + Math.sin(player.swingAngle) * swingLength;
     
@@ -1851,7 +1775,7 @@ function damageEnemy(enemy, amount) {
     if (enemy.lastDamageTime > 0) return;
     
     enemy.health -= amount;
-    enemy.lastDamageTime = 15; // Shorter i-frame
+    enemy.lastDamageTime = 15;
     enemy.vy = -3;
     enemy.vx = (enemy.x - player.x > 0 ? 1 : -1) * 2;
     
@@ -2308,7 +2232,7 @@ function drawHeldItem() {
     }
 
     const isSword = heldItem.id >= 1000;
-    const itemSize = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 1.5;
+    const itemSize = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 1.5; // Longer swords
     
     ctx.save();
     ctx.translate(Math.round(player.x + player.width / 2), Math.round(player.y + player.height / 2 - 10));
@@ -2574,12 +2498,10 @@ function drawCreativeInventoryScreen() {
         drawSlotContents(item, sx, sy);
     }
     
-    // --- BUG FIX: Draw the main inventory ---
     const invGridWidth = 9 * (s + p) - p;
     const invGridX = (canvas.width - invGridWidth) / 2;
     const invGridY = startY + uiHeight - 180;
     drawMainInventory(invGridX, invGridY);
-    // --- End of fix ---
 
     // --- Trash Slot ---
     const trashX = startX + uiWidth - s - 20;
