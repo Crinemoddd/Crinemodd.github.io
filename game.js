@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.21 (Mining Fix & Smart Cursor Fix) ---
+// --- GAME MAKER: v10.22 (Mining Fix & Smart Cursor Toggle) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -408,7 +408,7 @@ let camera = {
     currentZoom: 1.0,
     zoomSpeed: 0.05
 };
-let keys = { w: false, a: false, d: false, s: false, e: false, z: false, x: false, Control: false };
+let keys = { w: false, a: false, d: false, s: false, e: false, z: false, x: false, Control: false, ControlPressed: false };
 let mouse = {
     x: 0, y: 0,
     rawX: 0, rawY: 0,
@@ -841,9 +841,14 @@ function handleMenuClick(e) {
 
 function setupInputListeners() {
     window.addEventListener('keydown', (e) => {
-        if (e.key === 'Control') keys.Control = true;
+        if (e.key === 'Control') {
+            if (gameState === 'PLAYING' && !keys.ControlPressed) { // Only toggle in-game
+                mouse.isSmartCursor = !mouse.isSmartCursor;
+            }
+            keys.Control = true;
+            keys.ControlPressed = true;
+        }
         
-        // --- BUG FIX: Check gameState ---
         if (gameState === 'PLAYING') {
             if (isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
                 if (e.key === 'e' || e.key === 'E' || e.key === 'Escape') {
@@ -890,7 +895,10 @@ function setupInputListeners() {
         }
     });
     window.addEventListener('keyup', (e) => {
-        if (e.key === 'Control') keys.Control = false;
+        if (e.key === 'Control') {
+            keys.Control = false;
+            keys.ControlPressed = false;
+        }
         
         if (e.key === 'w' || e.key === 'W' || e.key === ' ') keys.w = false;
         if (e.key === 'a' || e.key === 'A') keys.a = false;
@@ -912,8 +920,6 @@ function setupInputListeners() {
         const rect = canvas.getBoundingClientRect();
         mouse.rawX = e.clientX - rect.left;
         mouse.rawY = e.clientY - rect.top;
-        
-        // --- Smart cursor logic now in update() ---
     });
     
     canvas.addEventListener('mousedown', (e) => {
@@ -937,7 +943,7 @@ function setupInputListeners() {
             handleInventoryClick(e.button, 'furnace', isShiftClick);
         } else {
             if (e.button === 0) {
-                useHeldItem(); // --- MODIFIED: This is the new master function
+                useHeldItem();
             }
             if (e.button === 2) {
                 handleRightClick();
@@ -967,7 +973,7 @@ function resizeCanvas() {
 
 // --- 8. Interaction Logic ---
 function useHeldItem() {
-    if (player.attackCooldown > 0) return; // Still swinging
+    if (player.attackCooldown > 0) return;
     
     const heldItem = hotbarSlots[selectedSlot];
     const heldId = heldItem ? heldItem.id : null;
@@ -983,7 +989,6 @@ function useHeldItem() {
     } else if (isPick) {
         startMining(mouse.tileX, mouse.tileY);
     } else {
-        // Hand/Block/etc. - just punch
         player.isSwinging = true;
         player.swingDuration = 20; // Fast punch
         player.swingTimer = 20;
@@ -1022,14 +1027,13 @@ function startMining(x, y) {
         return;
     }
     
-    // --- BUG FIX: Use TOOL_MINE_SPEED ---
     const toolMineSpeed = TOOL_MINE_SPEED[heldId] ?? 30;
     
     miningState.isMining = true;
     miningState.tileX = x;
     miningState.tileY = y;
     miningState.progress = 0;
-    miningState.requiredTime = toolMineSpeed; // Correctly use new speed
+    miningState.requiredTime = toolMineSpeed;
     
     player.isSwinging = true;
     player.swingDuration = miningState.requiredTime;
@@ -1047,7 +1051,6 @@ function stopMining() {
     miningState.isMining = false;
     miningState.progress = 0;
     
-    // Only stop swing if mouse is up OR if not smart mining
     if (!mouse.isDown || !mouse.isSmartCursor) {
         player.isSwinging = false;
         player.swingTimer = 0;
@@ -1481,7 +1484,7 @@ function updateFurnace() {
 }
 
 function updateSmartCursor() {
-    mouse.isSmartCursor = keys.Control;
+    // mouse.isSmartCursor is toggled in keydown
     
     const mouseWorldX = (mouse.rawX / camera.currentZoom) + camera.x;
     const mouseWorldY = (mouse.rawY / camera.currentZoom) + camera.y;
@@ -1579,7 +1582,7 @@ function update() {
         updateSmartCursor();
     } else {
         canvas.style.cursor = 'default';
-        mouse.isSmartCursor = false;
+        // Don't reset smart cursor, it's a toggle
         mouse.tileX = toTileCoord((mouse.rawX / camera.currentZoom) + camera.x);
         mouse.tileY = toTileCoord((mouse.rawY / camera.currentZoom) + camera.y);
     }
@@ -1975,8 +1978,14 @@ function updateMining() {
                     const newTile = getTile(mouse.tileX, mouse.tileY);
                     if (newTile !== TILES.AIR) {
                         useHeldItem(); // This will call startMining()
+                    } else {
+                        // Smart cursor ran out of tiles, so stop swinging
+                        player.isSwinging = false;
+                        player.swingTimer = 0;
+                        player.attackCooldown = 0;
                     }
                 } else {
+                    // Not smart mining, so just stop swinging
                     player.isSwinging = false;
                     player.swingTimer = 0;
                     player.attackCooldown = 0;
