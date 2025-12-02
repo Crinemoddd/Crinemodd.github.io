@@ -1,4 +1,4 @@
-// --- GAME MAKER: v10.18 (Creative Mode, Flying, Item Catalog) ---
+// --- GAME MAKER: v10.19 (Creative Inventory Fix) ---
 // --- 1. Setup ---
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -117,7 +117,6 @@ const TILE_SPRITES = {
     [TILES.STICK_OBAMA]: [3, 4],
     [TILES.OBAMA_INGOT]: [4, 4],
 };
-// --- NEW: List of all items for creative menu ---
 const CREATIVE_ITEM_LIST = Object.keys(TILE_SPRITES).map(Number);
 
 const BLOCK_OPACITY = {
@@ -388,8 +387,8 @@ let player = {
     lastDamageTime: 0,
     fallDistance: 0,
     attackCooldown: 0,
-    isFlying: false, // NEW
-    lastJumpPressTime: 0 // NEW
+    isFlying: false,
+    lastJumpPressTime: 0
 };
 let camera = {
     x: 0, y: 0,
@@ -704,7 +703,7 @@ function findSurfaceY(globalX) {
 function generateTreeInChunk(chunk, x, y) {
     let logType = TILES.WOOD_LOG;
     let leafType = TILES.LEAVES;
-    if (Math.random() < 0.05) { // 5% chance of Obama Tree
+    if (Math.random() < 0.05) {
         logType = TILES.BARK_OBAMA;
         leafType = TILES.LEAVE_OBAMA;
     }
@@ -1081,23 +1080,17 @@ function placeBlock() {
         return;
     }
     
-    // --- CREATIVE MODE: Don't remove block ---
-    if (!isCreativeMode) {
-        if (!removeBlockFromInventory(hotbarSlots, selectedSlot)) {
-            return; // Not in creative and no blocks to place
-        }
-    }
-    
-    // Place the block
-    setTile(mouse.tileX, mouse.tileY, slot.id);
-    
-    if (slot.id === TILES.TORCH) {
-        setLight(mouse.tileX, mouse.tileY, 14);
-    } else if (isBlockSolid(slot.id)) {
-        setLight(mouse.tileX, mouse.tileY, 0);
-        const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
-        if (lightAbove === AMBIENT_LIGHT_LEVEL) {
-             lightQueue.push([mouse.tileX, mouse.tileY - 1]);
+    if (isCreativeMode || removeBlockFromInventory(hotbarSlots, selectedSlot)) {
+        setTile(mouse.tileX, mouse.tileY, slot.id);
+        
+        if (slot.id === TILES.TORCH) {
+            setLight(mouse.tileX, mouse.tileY, 14);
+        } else if (isBlockSolid(slot.id)) {
+            setLight(mouse.tileX, mouse.tileY, 0);
+            const lightAbove = getLight(mouse.tileX, mouse.tileY - 1);
+            if (lightAbove === AMBIENT_LIGHT_LEVEL) {
+                 lightQueue.push([mouse.tileX, mouse.tileY - 1]);
+            }
         }
     }
 }
@@ -1116,15 +1109,14 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             const index = parseInt(indexStr);
             let slotArray, setter;
             
-            // --- CREATIVE MODE CLICKS ---
             if (uiType === 'creative') {
                 if (arrayName === 'catalog') {
                     const sourceItem = slotCoords[key].item;
                     let stackSize = sourceItem.id < 100 || (sourceItem.id >= 107 && sourceItem.id <= 113) ? MAX_STACK : 1;
-                    if (button === 2) stackSize = 1; // Right-click gives one
+                    if (button === 2) stackSize = 1;
                     
                     mouse.heldItem = { ...sourceItem, count: stackSize };
-                    return; // Don't check crafting
+                    return;
                 }
                 if (arrayName === 'trash') {
                     mouse.heldItem = null;
@@ -1154,22 +1146,21 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
                 else if (arrayName === 'furnaceOut') { handleOutputClick(furnaceOutput, 'furnace', (item) => furnaceOutput = item, isShiftClicking); return; }
             }
             
-            // --- CREATIVE MODE CLICKING ---
-            if (isCreativeMode && uiType === 'creative' && slotArray) {
-                if (button === 0) { // Left-click in inventory
+            if (isCreativeMode && (arrayName === 'inv' || arrayName === 'hotbar')) {
+                if (button === 0) {
                     if(mouse.heldItem) {
-                        setter({ ...mouse.heldItem }); // Place a copy
+                        setter({ ...mouse.heldItem, count: 1 }); // Place a copy of 1
                     } else {
-                        setter(null); // Delete
+                        setter(null);
                     }
-                } else if (button === 2) { // Right-click
-                    setter(null); // Delete
+                } else if (button === 2) {
+                    setter(null);
                 }
-                return; // Don't run normal logic
+                return;
             }
 
             if (isShiftClicking && slotArray) {
-                quickMoveItem(slotArray, index, fromArea, setter);
+                quickMoveItem(slotArray, index, arrayName, setter);
             } else if (slotArray) {
                 handleSlotClick(slotArray, index, button, setter);
             }
@@ -1182,6 +1173,8 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
 }
 
 function quickMoveItem(slotArray, index, fromArea, setter) {
+    if (isCreativeMode) return; // No shift-clicking in creative
+    
     let itemStack = slotArray[index];
     if (!itemStack) return;
     let remainingStack = null;
@@ -1480,7 +1473,6 @@ function update() {
         else if (keys.d) player.vx = MOVE_SPEED;
         else player.vx = 0;
 
-        // --- MODIFIED: Flying Logic ---
         if (player.isFlying) {
             player.fallDistance = 0;
             if (keys.w) player.vy = -MOVE_SPEED;
@@ -1506,7 +1498,7 @@ function update() {
                 player.vy = 0;
                 player.y = (tileY * TILE_SIZE) - player.height;
                 if (!player.isOnGround && !player.isFlying) {
-                    updatePlayerFallDamage(player.y - oldY); // Landed
+                    updatePlayerFallDamage(player.y - oldY);
                 }
                 player.isOnGround = true;
                 player.fallDistance = 0;
@@ -1611,7 +1603,7 @@ function update() {
                 else if (arrayName === 'furnaceFuel') hoveredItem = furnaceFuel;
                 else if (arrayName === 'furnaceOut') hoveredItem = furnaceOutput;
                 else if (arrayName === 'catalog') hoveredItem = slotCoords[key].item;
-                else if (arrayName === 'trash') hoveredItem = { id: -1, count: 0 }; // Placeholder
+                else if (arrayName === 'trash') hoveredItem = { id: -1, count: 0 };
                 break;
             }
         }
@@ -2278,6 +2270,7 @@ function drawPlayerInventoryScreen() {
     ctx.lineWidth = 2;
     ctx.strokeRect(startX - 2, startY - 2, uiWidth + 4, uiHeight + 4);
 
+
     const craftGridX = startX + uiWidth - (2 * (s+p) + 40 + (s+p)) - 20;
     const craftGridY = startY + 20;
     
@@ -2332,7 +2325,6 @@ function drawPlayerInventoryScreen() {
     drawMainInventory(invGridX, invGridY);
 }
 
-// --- NEW: Creative Inventory Screen ---
 function drawCreativeInventoryScreen() {
     slotCoords = {};
     const s = SLOT_SIZE; const p = SLOT_PADDING;
@@ -2372,9 +2364,16 @@ function drawCreativeInventoryScreen() {
         drawSlotContents(item, sx, sy); // Draw item
     }
     
+    // --- BUG FIX: Draw the main inventory ---
+    const invGridWidth = 9 * (s + p) - p;
+    const invGridX = (canvas.width - invGridWidth) / 2;
+    const invGridY = startY + uiHeight - 180; // Position at bottom
+    drawMainInventory(invGridX, invGridY);
+    // --- End of fix ---
+
     // --- Trash Slot ---
     const trashX = startX + uiWidth - s - 20;
-    const trashY = startY + uiHeight - s - 20;
+    const trashY = startY + uiHeight - s - 60; // Move up
     slotCoords['trash-0'] = { x: trashX, y: trashY };
     drawSlot(null, trashX, trashY);
     ctx.fillStyle = '#FF0000';
