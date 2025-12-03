@@ -422,9 +422,7 @@ let miningState = {
     tileX: 0,
     tileY: 0,
     progress: 0,
-    requiredTime: 0,
-    oldTileX: -1,
-    oldTileY: -1
+    requiredTime: 0
 };
 const GRAVITY = 0.3;
 const JUMP_STRENGTH = -8;
@@ -474,7 +472,6 @@ let removeQueue = [];
 // --- Enemy System ---
 let enemies = [];
 let spawnPos = { x: 0, y: 0 };
-let enemySpawnTimer = 0;
 
 let hoveredItem = null;
 const simplex = new SimplexNoise();
@@ -570,12 +567,9 @@ function addSwordRecipes() {
 addSwordRecipes();
 
 const SMELT_RECIPES = {
-    [TILES.COPPER]: TILES.COPPER_INGOT,
-    [TILES.IRON]: TILES.IRON_INGOT,
-    [TILES.DIAMOND]: TILES.DIAMOND_INGOT,
-    [TILES.COBALT]: TILES.COBALT_INGOT,
-    [TILES.PLATINUM]: TILES.PLATINUM_INGOT,
-    [TILES.WOOD_LOG]: TILES.COAL,
+    [TILES.COPPER_ORE]: TILES.COPPER_INGOT, [TILES.IRON_ORE]: TILES.IRON_INGOT,
+    [TILES.DIAMOND]: TILES.DIAMOND_INGOT, [TILES.COBALT]: TILES.COBALT_INGOT,
+    [TILES.PLATINUM]: TILES.PLATINUM_INGOT, [TILES.WOOD_LOG]: TILES.COAL,
     [TILES.ORE_BAMA]: TILES.OBAMA_INGOT
 };
 const FUEL_TIMES = {
@@ -1041,15 +1035,10 @@ function startMining(x, y) {
     miningState.progress = 0;
     miningState.requiredTime = toolMineSpeed;
     
-    const tileChanged = miningState.oldTileX !== x || miningState.oldTileY !== y;
-    if (tileChanged) {
-        miningState.oldTileX = x;
-        miningState.oldTileY = y;
-        player.isSwinging = true;
-        player.swingDuration = miningState.requiredTime;
-        player.swingTimer = miningState.requiredTime;
-        player.attackCooldown = miningState.requiredTime;
-    }
+    player.isSwinging = true;
+    player.swingDuration = miningState.requiredTime;
+    player.swingTimer = miningState.requiredTime;
+    player.attackCooldown = miningState.requiredTime;
     
     if (isCreativeMode) {
         miningState.progress = miningState.requiredTime;
@@ -1109,8 +1098,10 @@ function placeBlock() {
     if (dist > INTERACTION_RANGE) return;
     
     const currentTile = getTile(mouse.tileX, mouse.tileY);
-    if (currentTile !== TILES.AIR && !(slot.id === TILES.TORCH && !isBlockSolid(currentTile))) {
-        return;
+    if (currentTile !== TILES.AIR) {
+        if (slot.id !== TILES.TORCH || isBlockSolid(currentTile)) {
+             return;
+        }
     }
     
     const tilePixelX = mouse.tileX * TILE_SIZE;
@@ -1152,7 +1143,6 @@ function handleInventoryClick(button, uiType, isShiftClicking = false) {
             if (uiType === 'creative') {
                 if (arrayName === 'catalog') {
                     const sourceItem = slotCoords[key].item;
-                    if (!sourceItem) return;
                     let stackSize = sourceItem.id < 100 || (sourceItem.id >= 107 && sourceItem.id <= 113) ? MAX_STACK : 1;
                     if (button === 2) stackSize = 1;
                     
@@ -1541,7 +1531,7 @@ function updateSmartCursor() {
                 let isAdjacentToSolid = false;
                 for (const [nx, ny] of neighbors) {
                     const neighborTile = getTile(nx, ny);
-                    if (getBlockOpacity(neighborTile) >= 16) {
+                    if (neighborTile !== TILES.AIR && isBlockSolid(neighborTile)) {
                         isAdjacentToSolid = true;
                         break;
                     }
@@ -1814,8 +1804,8 @@ function checkSwingHitDetection() {
     const heldItem = hotbarSlots[selectedSlot];
     const heldId = heldItem ? heldItem.id : null;
     
-    const isSword = heldId && heldId >= 1000 && heldId < 2000;
-    const isPick = heldId && heldId >= 100 && heldId < 1000;
+    const isSword = heldId >= 1000;
+    const isPick = heldId >= 100 && heldId < 1000;
     
     if (isPick) return;
     
@@ -1883,14 +1873,6 @@ function damageEnemy(enemy, amount) {
 }
 
 function updateEnemies() {
-    enemySpawnTimer--;
-    if (enemySpawnTimer <= 0) {
-        const spawnX = player.x + (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 200 + 100);
-        const spawnY = player.y - 100;
-        spawnEnemy(spawnX, spawnY);
-        enemySpawnTimer = Math.random() * 300 + 200;
-    }
-
     for (let i = enemies.length - 1; i >= 0; i--) {
         const enemy = enemies[i];
         
@@ -2058,8 +2040,10 @@ function processRemoveQueue() {
 function isTileSolid(tileX, tileY) {
     const tileType = getTile(tileX, tileY);
     if (tileType === TILES.AIR || 
+        tileType === TILES.WOOD_LOG || 
         tileType === TILES.LEAVES ||
         tileType === TILES.TORCH ||
+        tileType === TILES.BARK_OBAMA ||
         tileType === TILES.LEAVE_OBAMA) {
         return false;
     }
@@ -2336,10 +2320,8 @@ function drawHeldItem() {
     if (!player.isSwinging || !heldItem || !TILE_SPRITES[heldItem.id] || heldItem.id < 100 || isInventoryOpen || isCraftingTableOpen || isFurnaceOpen) {
         return;
     }
-    const heldId = heldItem.id;
-    if (heldId >= 100 && heldId < 1000) return;
 
-    const isSword = heldId >= 1000;
+    const isSword = heldItem.id >= 1000;
     const itemSize = isSword ? TILE_SIZE * 2.5 : TILE_SIZE * 1.5;
     
     ctx.save();
@@ -2725,7 +2707,7 @@ function drawFurnaceUI() {
     ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s, 4);
     if(furnaceCookTime > 0) {
         ctx.fillStyle = '#FFD700';
-        const progress = 1 - (furnaceCookTime / COOK_TIME);
+        const progress = (COOK_TIME - furnaceCookTime) / COOK_TIME;
         ctx.fillRect(furnaceX, furnaceY + 1 * (s+p) + 10, s * progress, 4);
     }
     
@@ -2733,7 +2715,7 @@ function drawFurnaceUI() {
     ctx.fillRect(fuelX, fuelY - 8, s, 4);
     if(furnaceFuelTime > 0) {
         ctx.fillStyle = '#FF6347';
-        const maxFuel = furnaceFuel?.id ? FUEL_TIMES[furnaceFuel.id] || 800 : 800;
+        const maxFuel = FUEL_TIMES[Object.keys(FUEL_TIMES).find(e=>furnaceFuelTime<FUEL_TIMES[e])] || 800;
         const progress = furnaceFuelTime / maxFuel;
         ctx.fillRect(fuelX, fuelY - 8, s * progress, 4);
     }
